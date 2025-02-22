@@ -75,15 +75,27 @@ async def webhook_handler(request: Request, token: str, application, processed_u
         logger.error(f"Error processing webhook: {str(e)}")
         return {"ok": False, "error": str(e)}
 
+async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for the /clear command."""
+    user_id = str(update.effective_user.id)
+    conversations = context.bot_data["conversations"]
+
+    # Reset the conversation to just the system prompt
+    conversations[user_id] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
+
+    logger.info(f"Cleared conversation history for user {user_id}")
+    await update.message.reply_text("Conversation history has been cleared!")
+
+# In the initialize_bot function, add the new handler:
 async def initialize_bot(token: str, model_client, system_prompt: str, conversations):
-    """Initialize the bot application."""
     application = Application.builder().token(token).build()
     application.bot_data["model_client"] = model_client
     application.bot_data["system_prompt"] = system_prompt
-    application.bot_data["conversations"] = conversations  # Pass conversations to bot_data
+    application.bot_data["conversations"] = conversations
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear))  # Add this line
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     await application.initialize()
