@@ -46,18 +46,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        await update.message.reply_text(response_text)
+        await update.message.reply_text(response_text, parse_mode="MarkdownV2")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
 
-async def webhook_handler(request: Request, token: str, application):
+async def webhook_handler(request: Request, token: str, application, processed_updates):
     """Handle incoming webhook updates."""
     if token != os.environ.get("TELEGRAM_TOKEN"):
         return {"error": "Invalid token"}
 
     try:
         update_data = await request.json()
+
+        # Check for duplicate updates
+        update_id = str(update_data.get('update_id'))
+        if update_id in processed_updates:
+            logger.info(f"Skipping duplicate update {update_id}")
+            return {"ok": True, "info": "Update already processed"}
+
+        # Mark as processed
+        processed_updates[update_id] = True
+
         update = Update.de_json(update_data, application.bot)
         await application.process_update(update)
         return {"ok": True}
