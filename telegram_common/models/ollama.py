@@ -64,22 +64,32 @@ class OllamaClient(ModelClient):
     async def generate_response(self, prompt: str, history: List[Dict]) -> str:
         """Generate a response using the Ollama API."""
         try:
-            # The history already includes the system prompt, so we don't need to add it again
+            logger.debug(f"Generating response for prompt: {prompt[:100]}...")  # Log first 100 chars
+
             response = requests.post(
                 "http://localhost:11434/api/chat",
                 json={
                     "model": self.model_name,
-                    "messages": history,  # Use the existing history (includes system prompt)
+                    "messages": history,
                     "stream": False,
                 },
             )
 
+            logger.debug(f"Raw API response: {response.text[:500]}...")  # Log first 500 chars
+
             response_data = response.json()
             if "message" in response_data and "content" in response_data["message"]:
-                return escape_markdown(response_data["message"]["content"].strip())
+                raw_content = response_data["message"]["content"].strip()
+                logger.debug(f"Raw content before escaping: {raw_content[:200]}...")  # Log first 200 chars
+
+                escaped_content = escape_markdown(raw_content)
+                logger.debug(f"Escaped content: {escaped_content[:200]}...")  # Log first 200 chars
+
+                return escaped_content
             else:
                 logger.error(f"Unexpected response format: {response_data}")
                 return "Sorry, I'm having trouble generating a response right now."
+
         except Exception as e:
-            logger.error(f"Error generating response: {str(e)}")
+            logger.error(f"Error generating response: {str(e)}", exc_info=True)  # Added exc_info for stack trace
             return "Sorry, I'm having trouble generating a response right now."
