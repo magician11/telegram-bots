@@ -32,6 +32,9 @@ def escape_markdown(text: str) -> str:
 
 def markdown_to_html(text: str) -> str:
 
+    # First remove any existing backslashes
+    text = text.replace('\\', '')
+
     # Convert headings to bold
     # Convert ### Heading to <b>Heading</b>
     text = re.sub(r'^#{1,6}\s*(.*?)$', r'<b>\1</b>', text, flags=re.MULTILINE)
