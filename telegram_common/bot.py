@@ -46,7 +46,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        await update.message.reply_text(response_text, parse_mode="MarkdownV2")
+        await update.message.reply_text(response_text, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")

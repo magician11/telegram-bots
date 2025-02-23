@@ -4,7 +4,7 @@ import subprocess
 import time
 from typing import List, Dict
 from .base import ModelClient
-from ..utils import escape_markdown
+from ..utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +82,10 @@ class OllamaClient(ModelClient):
                 raw_content = response_data["message"]["content"].strip()
                 logger.debug(f"Raw content before escaping: {raw_content[:200]}...")  # Log first 200 chars
 
-                escaped_content = escape_markdown(raw_content)
-                logger.debug(f"Escaped content: {escaped_content[:200]}...")  # Log first 200 chars
+                html_content = markdown_to_html(raw_content)
+                logger.debug(f"HTML content: {html_content[:200]}...")  # Log first 200 chars
 
-                return escaped_content
+                return html_content
             else:
                 logger.error(f"Unexpected response format: {response_data}")
                 return "Sorry, I'm having trouble generating a response right now."

@@ -29,3 +29,10 @@ def escape_markdown(text: str) -> str:
     except Exception as e:
         logger.error(f"Error while escaping markdown: {str(e)}")
         return text
+
+def markdown_to_html(text: str) -> str:
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # bold
+    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # italic
+    text = re.sub(r'`(.*?)`', r'<code>\1</code>', text) # code
+    text = re.sub(r'~~(.*?)~~', r'<s>\1</s>', text)     # strikethrough
+    return text
