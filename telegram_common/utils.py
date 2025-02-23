@@ -31,6 +31,11 @@ def escape_markdown(text: str) -> str:
         return text
 
 def markdown_to_html(text: str) -> str:
+
+    # Convert headings to bold
+    # Convert ### Heading to <b>Heading</b>
+    text = re.sub(r'^#{1,6}\s*(.*?)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)  # bold
     text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)      # italic
     text = re.sub(r'`(.*?)`', r'<code>\1</code>', text) # code
