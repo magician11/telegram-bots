@@ -5,19 +5,21 @@ logger = logging.getLogger(__name__)
 
 def escape_markdown(text: str) -> str:
     """
-    Handle Markdown formatting, assuming text comes with pre-escaped markers.
+    Handle Markdown formatting, converting double asterisks to single and escaping special characters.
     """
-    # First unescape any pre-escaped Markdown formatting characters
-    markdown_chars = r'*_~[]`'
-    text = re.sub(r'\\([' + re.escape(markdown_chars) + r'])', r'\1', text)
-
-    # Then escape only non-formatting special characters
-    escape_chars = r"!#>+-=|{}.()"
-
     try:
         preview_length = 100
         logger.info(f"Original text (first {preview_length} chars): {text[:preview_length]}...")
 
+        # First unescape any pre-escaped Markdown formatting characters
+        markdown_chars = r'*_~[]`'
+        text = re.sub(r'\\([' + re.escape(markdown_chars) + r'])', r'\1', text)
+
+        # Convert **text** to *text* using regex to ensure pairs
+        text = re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
+
+        # Then escape only non-formatting special characters
+        escape_chars = r"!#>+-=|{}.()"
         escaped_text = re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
         logger.info(f"Escaped text (first {preview_length} chars): {escaped_text[:preview_length]}...")
