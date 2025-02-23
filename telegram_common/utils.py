@@ -11,7 +11,7 @@ def escape_markdown(text: str) -> str:
 
     try:
         # Log the original text (but limit length for log readability)
-        preview_length = 100
+        preview_length = 333
         logger.info(f"Original text (first {preview_length} chars): {text[:preview_length]}...")
 
         # Process the text character by character, keeping track of escapes
