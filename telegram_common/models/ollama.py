@@ -4,7 +4,6 @@ import subprocess
 import time
 from typing import List, Dict
 from .base import ModelClient
-from ..utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ class OllamaClient(ModelClient):
     async def generate_response(self, prompt: str, history: List[Dict]) -> str:
         """Generate a response using the Ollama API."""
         try:
-            logger.debug(f"Generating response for prompt: {prompt[:100]}...")  # Log first 100 chars
+            logger.info(f"Generating response for prompt: {prompt[:100]}...")  # Log first 100 chars
 
             response = requests.post(
                 "http://localhost:11434/api/chat",
@@ -75,17 +74,12 @@ class OllamaClient(ModelClient):
                 },
             )
 
-            logger.debug(f"Raw API response: {response.text[:500]}...")  # Log first 500 chars
+            logger.info(f"Raw API response: {response.text[:500]}...")  # Log first 500 chars
 
             response_data = response.json()
             if "message" in response_data and "content" in response_data["message"]:
                 raw_content = response_data["message"]["content"].strip()
-                logger.debug(f"Raw content before escaping: {raw_content[:200]}...")  # Log first 200 chars
-
-                html_content = markdown_to_html(raw_content)
-                logger.debug(f"HTML content: {html_content[:200]}...")  # Log first 200 chars
-
-                return html_content
+                return raw_content
             else:
                 logger.error(f"Unexpected response format: {response_data}")
                 return "Sorry, I'm having trouble generating a response right now."

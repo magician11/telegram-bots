@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
 import os
+from .utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Generate a response using the model client
         model_client = context.bot_data["model_client"]
         response_text = await model_client.generate_response(user_message, history)
-        logger.info(response_text)
+        logger.info(f"Response text: {response_text}")
 
-        # Append the assistant's response
+        # Convert Markdown to HTML
+        html_response = markdown_to_html(response_text)
+        logger.info(f"Converted response: {html_response}")
+
+        # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
 
         # Trim the conversation history if it gets too long
@@ -46,7 +51,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        await update.message.reply_text(response_text, parse_mode="HTML")
+        await update.message.reply_text(html_response, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
