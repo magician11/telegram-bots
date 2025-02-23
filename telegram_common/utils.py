@@ -6,24 +6,25 @@ logger = logging.getLogger(__name__)
 def escape_markdown(text: str) -> str:
     """
     Handle Markdown formatting, converting double asterisks to single and escaping special characters.
+    Only escape characters that need to be escaped for MarkdownV2, preserving formatting characters.
     """
     try:
-        preview_length = 100
+        preview_length = 333
         logger.info(f"Original text (first {preview_length} chars): {text[:preview_length]}...")
 
-        # First unescape any pre-escaped Markdown formatting characters
-        markdown_chars = r'*_~[]`'
-        text = re.sub(r'\\([' + re.escape(markdown_chars) + r'])', r'\1', text)
+        # First remove any existing backslashes
+        text = text.replace('\\', '')
 
         # Convert **text** to *text* using regex to ensure pairs
         text = re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
 
-        # Then escape only non-formatting special characters
+        # Escape only the special characters that need escaping
         escape_chars = r"!#>+-=|{}.()"
-        escaped_text = re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+        for char in escape_chars:
+            text = text.replace(char, f'\\{char}')
 
-        logger.info(f"Escaped text (first {preview_length} chars): {escaped_text[:preview_length]}...")
-        return escaped_text
+        logger.info(f"Escaped text (first {preview_length} chars): {text[:preview_length]}...")
+        return text
 
     except Exception as e:
         logger.error(f"Error while escaping markdown: {str(e)}")
