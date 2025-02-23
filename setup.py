@@ -14,6 +14,7 @@ setup(
         "python-telegram-bot",
         "fastapi",
         "openai",
+        "requests"
     ],
     classifiers=[  # Metadata about your package
         "Development Status :: 3 - Alpha",  # Update as your project matures
