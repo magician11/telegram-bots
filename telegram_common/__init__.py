@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from .bot import initialize_bot, webhook_handler
-from .models import ModelClient, OllamaClient, DeepSeekClient
+from .models import ModelClient, OllamaClient, DeepSeekClient, OpenAIClient
 
 __all__ = [
     'initialize_bot',
@@ -8,6 +8,7 @@ __all__ = [
     'ModelClient',
     'OllamaClient',
     'DeepSeekClient',
+    'OpenAIClient',
     'create_bot_app'
 ]
 
