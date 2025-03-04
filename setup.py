@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="telegram-common",  # Package name (hyphenated)
-    version="0.4",  # Version of your package
+    version="0.5",  # Version of your package
     description="A shared Python package for reusable Telegram bot functionality.",
     long_description=open("README.md").read(),  # Read the long description from README.md
     long_description_content_type="text/markdown",  # Specify the format of the long description

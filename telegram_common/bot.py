@@ -8,6 +8,8 @@ from .utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
+MAX_CONVERSATION_HISTORY = 11
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /start command."""
     user_id = str(update.effective_user.id)
@@ -32,6 +34,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Append the user's message
         history.append({"role": "user", "content": user_message})
 
+        # Log the full conversation history
+        logger.info(f"Current conversation history for user {user_id}:")
+        for idx, msg in enumerate(history):
+            logger.info(f"  [{idx}] {msg['role']}: {msg['content']}")
+
         # Generate a response using the model client
         model_client = context.bot_data["model_client"]
         response_text = await model_client.generate_response(user_message, history)
@@ -45,8 +52,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response_text})
 
         # Trim the conversation history if it gets too long
-        if len(history) > 10:
-            history = [history[0]] + history[-9:]  # Keep the system prompt and the last 9 messages
+        if len(history) > MAX_CONVERSATION_HISTORY:
+            history = [history[0]] + history[-(MAX_CONVERSATION_HISTORY-1):]  # Keep system prompt + last (MAX-1) messages
 
         # Save the updated conversation history
         conversations[user_id] = history
