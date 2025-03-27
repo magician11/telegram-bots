@@ -3,8 +3,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
+import markdown
 import os
-from .utils import markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Response text: {response_text}")
 
         # Convert Markdown to HTML
-        html_response = markdown_to_html(response_text)
+        html_response = markdown.markdown(response_text, extensions=['extra'])
         logger.info(f"Converted response: {html_response}")
 
         # Append the assistant's response (store the original markdown version)
