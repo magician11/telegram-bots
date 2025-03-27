@@ -3,7 +3,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
-import markdown
 import re
 import os
 
@@ -19,44 +18,99 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversations[user_id] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
     await update.message.reply_text("Hi! How can I help you today?")
 
-def clean_for_telegram(html):
-    # Convert headings to bold
-    for i in range(1, 7):
-        html = html.replace(f'<h{i}>', '<b>').replace(f'</h{i}>', '</b>')
+def markdown_to_telegram_html(text):
+    """
+    Convert markdown to simple HTML that Telegram can reliably display.
+    Handles basic formatting with proper tag nesting and validation.
+    """
+    # First remove any existing HTML tags to prevent issues
+    text = re.sub(r'<[^>]+>', '', text)
 
-    # Remove paragraph tags
-    html = html.replace('<p>', '').replace('</p>', '')
+    # Convert markdown to HTML with proper nesting
+    # We'll process in multiple passes with careful ordering
 
-    # Replace BR tags with newlines
-    html = html.replace('<br />', '\n').replace('<br/>', '\n').replace('<br>', '\n')
+    # Step 1: Convert code blocks first (they shouldn't contain other formatting)
+    text = re.sub(r'```.*?\n(.*?)```', r'<pre>\1</pre>', text, flags=re.DOTALL)
+    text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
 
-    # Convert list items to simple formatting
-    html = html.replace('<ul>', '').replace('</ul>', '')
-    html = html.replace('<ol>', '').replace('</ol>', '')
-    html = html.replace('<li>', '• ').replace('</li>', '\n')
+    # Step 2: Convert bold-italic combinations (processed before individual formats)
+    text = re.sub(r'\*\*\*(.*?)\*\*\*', r'<b><i>\1</i></b>', text)
 
-    # Convert blockquotes
-    html = html.replace('<blockquote>', '').replace('</blockquote>', '')
+    # Step 3: Convert bold (must come before italic to prevent conflicts)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
 
-    # Remove any remaining unsupported tags
-    unsupported_tags = ['div', 'span', 'hr', 'table', 'tr', 'td', 'th']
-    for tag in unsupported_tags:
-        html = html.replace(f'<{tag}>', '').replace(f'</{tag}>', '')
+    # Step 4: Convert italic
+    text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
 
-    return html
+    # Step 5: Convert strikethrough
+    text = re.sub(r'~~(.*?)~~', r'<s>\1</s>', text)
 
-def prepare_for_markdownv2(text):
-    # Characters that need escaping in MarkdownV2
-    escape_chars = '_*[]()~`>#+-=|{}.!'
-    # Escape these characters
-    for char in escape_chars:
-        text = text.replace(char, f'\\{char}')
-    # Convert multi-level formatting to single level
-    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'*_\1_*', text)  # Bold italic
-    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)  # Bold
-    # Simplify structure
-    text = re.sub(r'###\s+(.+)', r'*\1*', text)  # Turn headers into bold
-    return text
+    # Step 6: Convert headers to bold
+    text = re.sub(r'^#+\s+(.*?)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+
+    # Step 7: Validate all tags are properly closed
+    stack = []
+    i = 0
+    result = []
+
+    while i < len(text):
+        if text.startswith('<b>', i):
+            stack.append('b')
+            result.append('<b>')
+            i += 3
+        elif text.startswith('<i>', i):
+            stack.append('i')
+            result.append('<i>')
+            i += 3
+        elif text.startswith('<s>', i):
+            stack.append('s')
+            result.append('<s>')
+            i += 3
+        elif text.startswith('<code>', i):
+            stack.append('code')
+            result.append('<code>')
+            i += 6
+        elif text.startswith('<pre>', i):
+            stack.append('pre')
+            result.append('<pre>')
+            i += 5
+        elif text.startswith('</b>', i) and stack and stack[-1] == 'b':
+            stack.pop()
+            result.append('</b>')
+            i += 4
+        elif text.startswith('</i>', i) and stack and stack[-1] == 'i':
+            stack.pop()
+            result.append('</i>')
+            i += 4
+        elif text.startswith('</s>', i) and stack and stack[-1] == 's':
+            stack.pop()
+            result.append('</s>')
+            i += 4
+        elif text.startswith('</code>', i) and stack and stack[-1] == 'code':
+            stack.pop()
+            result.append('</code>')
+            i += 7
+        elif text.startswith('</pre>', i) and stack and stack[-1] == 'pre':
+            stack.pop()
+            result.append('</pre>')
+            i += 6
+        else:
+            # Skip any unmatched closing tags
+            if text.startswith('</', i):
+                # Find the next '>'
+                gt_pos = text.find('>', i)
+                if gt_pos != -1:
+                    i = gt_pos + 1
+                    continue
+            result.append(text[i])
+            i += 1
+
+    # Close any remaining open tags
+    while stack:
+        tag = stack.pop()
+        result.append(f'</{tag}>')
+
+    return ''.join(result)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for incoming messages."""
@@ -85,11 +139,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Response text: {response_text}")
 
         # Convert Markdown to HTML
-        html_response = markdown.markdown(response_text, extensions=['extra'])
-        html_response = clean_for_telegram(html_response)
+        html_response = markdown_to_telegram_html(response_text)
         logger.info(f"Converted response: {html_response}")
-
-        prepared_markdown = prepare_for_markdownv2(response_text)
 
         # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
@@ -101,8 +152,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        # await update.message.reply_text(html_response, parse_mode="HTML")
-        await update.message.reply_text(prepared_markdown, parse_mode="MarkdownV2")
+        await update.message.reply_text(html_response, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
