@@ -18,6 +18,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversations[user_id] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
     await update.message.reply_text("Hi! How can I help you today?")
 
+def clean_for_telegram(html):
+    # Convert headings to bold
+    for i in range(1, 7):
+        html = html.replace(f'<h{i}>', '<b>').replace(f'</h{i}>', '</b>')
+
+    # Remove paragraph tags
+    html = html.replace('<p>', '').replace('</p>', '')
+
+    # Convert list items to simple formatting
+    html = html.replace('<ul>', '').replace('</ul>', '')
+    html = html.replace('<ol>', '').replace('</ol>', '')
+    html = html.replace('<li>', '• ').replace('</li>', '\n')
+
+    # Convert blockquotes
+    html = html.replace('<blockquote>', '').replace('</blockquote>', '')
+
+    # Remove any remaining unsupported tags
+    unsupported_tags = ['div', 'span', 'hr', 'br', 'table', 'tr', 'td', 'th']
+    for tag in unsupported_tags:
+        html = html.replace(f'<{tag}>', '').replace(f'</{tag}>', '')
+
+    return html
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for incoming messages."""
     try:
@@ -46,6 +69,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Convert Markdown to HTML
         html_response = markdown.markdown(response_text, extensions=['extra'])
+        html_response = clean_for_telegram(html_response)
         logger.info(f"Converted response: {html_response}")
 
         # Append the assistant's response (store the original markdown version)
@@ -58,8 +82,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        # await update.message.reply_text(html_response, parse_mode="HTML")
-        await update.message.reply_text(response_text, parse_mode="MarkdownV2")
+        await update.message.reply_text(html_response, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
