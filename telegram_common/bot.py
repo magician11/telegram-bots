@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
 import markdown
+import re
 import os
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,19 @@ def clean_for_telegram(html):
 
     return html
 
+def prepare_for_markdownv2(text):
+    # Characters that need escaping in MarkdownV2
+    escape_chars = '_*[]()~`>#+-=|{}.!'
+    # Escape these characters
+    for char in escape_chars:
+        text = text.replace(char, f'\\{char}')
+    # Convert multi-level formatting to single level
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'*_\1_*', text)  # Bold italic
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)  # Bold
+    # Simplify structure
+    text = re.sub(r'###\s+(.+)', r'*\1*', text)  # Turn headers into bold
+    return text
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for incoming messages."""
     try:
@@ -75,6 +89,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         html_response = clean_for_telegram(html_response)
         logger.info(f"Converted response: {html_response}")
 
+        prepared_markdown = prepare_for_markdownv2(response_text)
+
         # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
 
@@ -85,7 +101,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
-        await update.message.reply_text(html_response, parse_mode="HTML")
+        # await update.message.reply_text(html_response, parse_mode="HTML")
+        await update.message.reply_text(prepared_markdown, parse_mode="MarkdownV2")
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
