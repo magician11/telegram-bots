@@ -26,6 +26,9 @@ def clean_for_telegram(html):
     # Remove paragraph tags
     html = html.replace('<p>', '').replace('</p>', '')
 
+    # Replace BR tags with newlines
+    html = html.replace('<br />', '\n').replace('<br/>', '\n').replace('<br>', '\n')
+
     # Convert list items to simple formatting
     html = html.replace('<ul>', '').replace('</ul>', '')
     html = html.replace('<ol>', '').replace('</ol>', '')
@@ -35,7 +38,7 @@ def clean_for_telegram(html):
     html = html.replace('<blockquote>', '').replace('</blockquote>', '')
 
     # Remove any remaining unsupported tags
-    unsupported_tags = ['div', 'span', 'hr', 'br', 'table', 'tr', 'td', 'th']
+    unsupported_tags = ['div', 'span', 'hr', 'table', 'tr', 'td', 'th']
     for tag in unsupported_tags:
         html = html.replace(f'<{tag}>', '').replace(f'</{tag}>', '')
 
