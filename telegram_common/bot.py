@@ -8,7 +8,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-MAX_CONVERSATION_HISTORY = 11
+MAX_CONVERSATION_HISTORY = 22
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /start command."""
