@@ -17,7 +17,13 @@ class DeepSeekClient(ModelClient):
                 model="deepseek-chat",
                 messages=history,  # Use the existing history (includes system prompt)
                 stream=False,
-                max_tokens=555
+                max_tokens=1111
+            )
+
+            logger.info(
+                f"Token usage: completion={response.usage.completion_tokens}, "
+                f"prompt={response.usage.prompt_tokens}, "
+                f"total={response.usage.total_tokens}"
             )
 
             return response.choices[0].message.content.strip()
