@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
 import re
+from html import escape as html_escape
 import os
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,10 @@ def markdown_to_telegram_html(text):
     """
     # First remove any existing HTML tags to prevent issues
     text = re.sub(r'<[^>]+>', '', text)
+
+    # Escape special characters (before converting markdown to HTML)
+    # Escape < that isn't part of a proper HTML tag
+    text = re.sub(r'<(?![/]?[a-z]+>)', '&lt;', text)
 
     # Convert markdown to HTML with proper nesting
     # We'll process in multiple passes with careful ordering
@@ -110,7 +115,21 @@ def markdown_to_telegram_html(text):
         tag = stack.pop()
         result.append(f'</{tag}>')
 
-    return ''.join(result)
+    # After existing processing (stack-based tag closing):
+    processed_text = ''.join(result)
+
+    # Step 8: Escape special characters not in valid tags
+    def replace_match(match):
+        if match.group(1):
+            return match.group(1)  # Preserve valid tags
+        return html_escape(match.group(3))
+
+    pattern = re.compile(
+        r'(</?(b|i|s|a|code|pre)\b[^>]*>)|([<>&])',
+        flags=re.IGNORECASE
+    )
+
+    return pattern.sub(replace_match, processed_text)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for incoming messages."""
