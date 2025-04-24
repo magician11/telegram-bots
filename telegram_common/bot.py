@@ -4,12 +4,14 @@ from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
 import re
+import time
 from html import escape as html_escape
 import os
 
 logger = logging.getLogger(__name__)
 
 MAX_CONVERSATION_HISTORY = 22
+PROCESSED_UPDATES_EXPIRY = 3600  # 1 hour = 3600 seconds
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /start command."""
@@ -154,12 +156,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Generate a response using the model client
         model_client = context.bot_data["model_client"]
-        response_text = await model_client.generate_response(user_message, history)
-        logger.info(f"Response text: {response_text}")
+        logger.info(f"Calling model API with user message: {user_message}")
+
+        # Improved error handling for model responses
+        try:
+            response_text = await model_client.generate_response(user_message, history)
+            if not response_text or response_text.strip() == "":
+                logger.error("Received empty response from model API")
+                raise ValueError("Empty response from API")
+            logger.info(f"Received valid response from model API: {len(response_text)} characters")
+        except Exception as e:
+            logger.error(f"Error getting response from model: {str(e)}")
+            raise  # Re-raise to be caught by the outer try/except
 
         # Convert Markdown to HTML
         html_response = markdown_to_telegram_html(response_text)
-        logger.info(f"Converted response: {html_response}")
+        logger.info(f"Converted response to HTML: {len(html_response)} characters")
 
         # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
@@ -171,18 +183,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save the updated conversation history
         conversations[user_id] = history
 
+        logger.info(f"Sending response to user {user_id}")
         await update.message.reply_text(html_response, parse_mode="HTML")
+        logger.info(f"Response sent to user {user_id}")
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        logger.error(f"Error processing message: {str(e)}, type: {type(e).__name__}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
 
 async def webhook_handler(request: Request, token: str, application, processed_updates):
-    """Handle incoming webhook updates."""
+    """Handle incoming webhook updates with expiry mechanism for old entries."""
     if token != os.environ.get("TELEGRAM_TOKEN"):
         return {"error": "Invalid token"}
 
     try:
         update_data = await request.json()
+        current_time = time.time()
+
+        # Clean up old entries (implement expiry)
+        expired_keys = []
+        for key, value in list(processed_updates.items()):
+            # Check if the value is a dict with timestamp or just a boolean
+            if isinstance(value, dict) and 'timestamp' in value:
+                if current_time - value['timestamp'] > PROCESSED_UPDATES_EXPIRY:
+                    expired_keys.append(key)
+            # For backward compatibility with existing boolean entries
+            elif isinstance(value, bool) and value is True:
+                # Convert old boolean entries to timestamped entries
+                processed_updates[key] = {'timestamp': current_time}
+
+        # Remove expired entries
+        for key in expired_keys:
+            logger.info(f"Removing expired update record: {key}")
+            del processed_updates[key]
 
         # Check for duplicate updates
         update_id = str(update_data.get('update_id'))
@@ -190,11 +222,14 @@ async def webhook_handler(request: Request, token: str, application, processed_u
             logger.info(f"Skipping duplicate update {update_id}")
             return {"ok": True, "info": "Update already processed"}
 
-        # Mark as processed
-        processed_updates[update_id] = True
-
+        # Process the update
         update = Update.de_json(update_data, application.bot)
         await application.process_update(update)
+
+        # Mark as processed with timestamp
+        processed_updates[update_id] = {'timestamp': current_time}
+        logger.info(f"Successfully processed update {update_id}")
+
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error processing webhook: {str(e)}")
