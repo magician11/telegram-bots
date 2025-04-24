@@ -191,7 +191,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
 
 async def webhook_handler(request: Request, token: str, application, processed_updates):
-    """Handle incoming webhook updates with expiry mechanism for old entries."""
+    """Handle incoming webhook updates with protection against race conditions."""
     if token != os.environ.get("TELEGRAM_TOKEN"):
         return {"error": "Invalid token"}
 
@@ -199,40 +199,65 @@ async def webhook_handler(request: Request, token: str, application, processed_u
         update_data = await request.json()
         current_time = time.time()
 
-        # Clean up old entries (implement expiry)
+        # Clean up old entries
         expired_keys = []
         for key, value in list(processed_updates.items()):
-            # Check if the value is a dict with timestamp or just a boolean
             if isinstance(value, dict) and 'timestamp' in value:
                 if current_time - value['timestamp'] > PROCESSED_UPDATES_EXPIRY:
                     expired_keys.append(key)
-            # For backward compatibility with existing boolean entries
             elif isinstance(value, bool) and value is True:
-                # Convert old boolean entries to timestamped entries
                 processed_updates[key] = {'timestamp': current_time}
 
-        # Remove expired entries
         for key in expired_keys:
             logger.info(f"Removing expired update record: {key}")
             del processed_updates[key]
 
-        # Check for duplicate updates
+        # Get update ID
         update_id = str(update_data.get('update_id'))
+
+        # Check if this update is already being processed or has been processed
         if update_id in processed_updates:
-            logger.info(f"Skipping duplicate update {update_id}")
-            return {"ok": True, "info": "Update already processed"}
+            value = processed_updates[update_id]
+
+            # Check if it's in "processing" state (temporary state before completion)
+            if isinstance(value, dict) and value.get('status') == 'processing':
+                processing_time = current_time - value.get('timestamp', 0)
+                logger.info(f"Update {update_id} is already being processed for {processing_time:.1f} seconds")
+                return {"ok": True, "info": "Update already being processed"}
+            else:
+                logger.info(f"Skipping duplicate update {update_id}")
+                return {"ok": True, "info": "Update already processed"}
+
+        # Mark as "being processed" immediately
+        processed_updates[update_id] = {
+            'timestamp': current_time,
+            'status': 'processing'
+        }
+        logger.info(f"Started processing update {update_id}")
 
         # Process the update
         update = Update.de_json(update_data, application.bot)
         await application.process_update(update)
 
-        # Mark as processed with timestamp
-        processed_updates[update_id] = {'timestamp': current_time}
+        # Mark as completed
+        processed_updates[update_id] = {
+            'timestamp': current_time,
+            'status': 'completed'
+        }
         logger.info(f"Successfully processed update {update_id}")
 
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Error processing webhook: {str(e)}")
+        # In case of error, still mark the update as processed to prevent retries
+        if 'update_id' in locals():
+            processed_updates[update_id] = {
+                'timestamp': current_time,
+                'status': 'error',
+                'error': str(e)
+            }
+            logger.error(f"Error processing update {update_id}: {str(e)}")
+        else:
+            logger.error(f"Error processing webhook: {str(e)}")
         return {"ok": False, "error": str(e)}
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
