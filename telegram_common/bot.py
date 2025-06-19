@@ -164,14 +164,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not response_text or response_text.strip() == "":
                 logger.error("Received empty response from model API")
                 raise ValueError("Empty response from API")
-            logger.info(f"Received valid response from model API: {len(response_text)} characters")
+            logger.info(f"Bot response: {response_text} ({len(response_text)} characters)")
         except Exception as e:
             logger.error(f"Error getting response from model: {str(e)}")
             raise  # Re-raise to be caught by the outer try/except
 
         # Convert Markdown to HTML
         html_response = markdown_to_telegram_html(response_text)
-        logger.info(f"Converted response to HTML: {len(html_response)} characters")
+        logger.info(f"HTML response: {html_response} ({len(html_response)} characters)")
 
         # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
