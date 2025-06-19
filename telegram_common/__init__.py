@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from .bot import initialize_bot, webhook_handler
 from .models import ModelClient, OllamaClient, DeepSeekClient, OpenAIClient
+import time
 
 __all__ = [
     'initialize_bot',
@@ -40,6 +41,14 @@ def create_bot_app(
             model_kwargs["system_prompt"],
             conversations
         )
+
+    @web_app.get("/health")
+    async def health_check():
+        return {
+            "status": "healthy",
+            "version": "1.0.0",
+            "timestamp": time.time()
+        }
 
     @web_app.post("/webhook/{token}")
     async def webhook_endpoint(token: str, request: Request):

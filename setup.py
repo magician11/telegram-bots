@@ -2,13 +2,13 @@ from setuptools import setup, find_packages
 
 setup(
     name="telegram-common",  # Package name (hyphenated)
-    version="0.57",  # Version of your package
+    version="1.0.0",  # Version of your package
     description="A shared Python package for reusable Telegram bot functionality.",
     long_description=open("README.md").read(),  # Read the long description from README.md
     long_description_content_type="text/markdown",  # Specify the format of the long description
     author="Andrew Golightly",
     author_email="support@golightlyplus.com",
-    url="https://saturn.tabby-alnair.ts.net/git/magician11/telegram-common",  # URL to your repository
+    url="https://github.com/magician11/telegram-bots.git",  # URL to your repository
     packages=find_packages(),  # Automatically find all packages (modules) in the project
     install_requires=[  # List of dependencies
         "python-telegram-bot",
@@ -22,7 +22,7 @@ setup(
         ],
     },
     classifiers=[  # Metadata about your package
-        "Development Status :: 3 - Alpha",  # Update as your project matures
+        "Development Status :: 5 - Production/Stable",  # Update as your project matures
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
