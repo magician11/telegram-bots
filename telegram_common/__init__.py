@@ -1,6 +1,7 @@
+import os
 from fastapi import FastAPI, Request
 from .bot import initialize_bot, webhook_handler
-from .models import ModelClient, OllamaClient, DeepSeekClient, OpenAIClient
+from .models import ModelClient, OllamaClient, DeepSeekClient, OpenAIClient, GrokClient
 import time
 
 __all__ = [
@@ -10,13 +11,14 @@ __all__ = [
     'OllamaClient',
     'DeepSeekClient',
     'OpenAIClient',
+    'GrokClient',
     'create_bot_app'
 ]
 
 def create_bot_app(
     model_class,
     model_kwargs: dict,
-    telegram_token: str,
+    system_prompt: str,
     conversations,
     processed_updates,
     startup_checks: bool = False
@@ -35,10 +37,14 @@ def create_bot_app(
             if not model_client.ensure_model_available():
                 raise RuntimeError("Failed to ensure model availability")
 
+        telegram_token = os.environ.get("TELEGRAM_TOKEN")
+        if not telegram_token:
+            raise RuntimeError("TELEGRAM_TOKEN environment variable not set")
+
         web_app.state.application = await initialize_bot(
             telegram_token,
             model_client,
-            model_kwargs["system_prompt"],
+            system_prompt,
             conversations
         )
 
