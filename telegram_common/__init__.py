@@ -1,8 +1,11 @@
 import os
+import logging
 from fastapi import FastAPI, Request
 from .bot import initialize_bot, webhook_handler
 from .models import ModelClient, OllamaClient, DeepSeekClient, OpenAIClient, GrokClient
 import time
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'initialize_bot',
@@ -29,10 +32,14 @@ def create_bot_app(
 
     @web_app.on_event("startup")
     async def startup_event():
+        logger.info("=== STARTUP: Beginning bot initialization ===")
+
         model_client = model_class(**model_kwargs)
+        logger.info(f"STARTUP: Model client created: {type(model_client).__name__}")
 
         # Handle Ollama-specific startup if needed
         if startup_checks and isinstance(model_client, OllamaClient):
+            logger.info("STARTUP: Starting Ollama service...")
             if not model_client.start_ollama_service():
                 raise RuntimeError("Failed to start Ollama service")
             if not model_client.ensure_model_available():
@@ -42,6 +49,9 @@ def create_bot_app(
         if not telegram_token:
             raise RuntimeError("TELEGRAM_TOKEN environment variable not set")
 
+        logger.info("STARTUP: About to initialize bot...")
+        logger.info(f"STARTUP: bot_config = {bot_config}")
+
         web_app.state.application = await initialize_bot(
             telegram_token,
             model_client,
@@ -49,6 +59,8 @@ def create_bot_app(
             conversations,
             bot_config
         )
+
+        logger.info("=== STARTUP: Bot initialization complete ===")
 
     @web_app.get("/health")
     async def health_check():
