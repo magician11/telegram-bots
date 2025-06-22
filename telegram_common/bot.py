@@ -349,12 +349,36 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversations = context.bot_data["conversations"]
     bot_config = context.bot_data.get("bot_config")
 
-    # Reset the conversation but keep usage tracking
+    # Reset the conversation but PRESERVE usage tracking
     if user_id in conversations:
+        user_data = conversations[user_id]
+
+        # Only reset the conversation history, keep daily_usage and is_premium
+        user_data["history"] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
+        conversations[user_id] = user_data  # Force Modal Dict save
+
+        # Create appropriate response message
+        if not bot_config or "daily_limit" not in bot_config:
+            # Free bot
+            response_msg = "Conversation history has been cleared!"
+        elif user_data.get("is_premium", False):
+            # Premium user
+            response_msg = "Conversation history has been cleared! (Premium - unlimited messages)"
+        else:
+            # Freemium user - show remaining count
+            daily_usage = user_data["daily_usage"]
+            remaining = max(0, daily_usage["limit"] - daily_usage["count"])
+            response_msg = (
+                f"Conversation history has been cleared!\n\n"
+                f"📊 You have {remaining} messages remaining today."
+            )
+    else:
+        # New user - initialize normally
         conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
+        response_msg = "Conversation history has been cleared!"
 
     logger.info(f"Cleared conversation history for user {user_id}")
-    await update.message.reply_text("Conversation history has been cleared!")
+    await update.message.reply_text(response_msg)
 
 async def initialize_bot(token: str, model_client, system_prompt: str, conversations, bot_config: dict = None):
     application = Application.builder().token(token).build()
