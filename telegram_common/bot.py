@@ -264,6 +264,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Save the updated conversation history
         user_data["history"] = history
+        conversations[user_id] = user_data
 
         logger.info(f"Sending response to user {user_id}")
         await update.message.reply_text(html_response, parse_mode="HTML")
