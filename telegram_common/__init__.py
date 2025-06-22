@@ -21,6 +21,7 @@ def create_bot_app(
     system_prompt: str,
     conversations,
     processed_updates,
+    bot_config: dict = None,
     startup_checks: bool = False
 ) -> FastAPI:
     """Create and configure a FastAPI app with bot functionality."""
@@ -45,7 +46,8 @@ def create_bot_app(
             telegram_token,
             model_client,
             system_prompt,
-            conversations
+            conversations,
+            bot_config
         )
 
     @web_app.get("/health")

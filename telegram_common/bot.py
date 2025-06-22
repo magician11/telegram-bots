@@ -1,4 +1,4 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from telegram import Update
 from telegram.ext import ContextTypes
 from fastapi import Request
@@ -7,18 +7,82 @@ import re
 import time
 from html import escape as html_escape
 import os
+from datetime import datetime, timezone
+from .payments import create_upgrade_keyboard, handle_upgrade_callback, handle_successful_payment
 
 logger = logging.getLogger(__name__)
 
 MAX_CONVERSATION_HISTORY = 22
 PROCESSED_UPDATES_EXPIRY = 3600  # 1 hour = 3600 seconds
 
+def init_user_data(system_prompt: str, bot_config: dict = None):
+    """Initialize user data structure."""
+    if not bot_config or "daily_limit" not in bot_config:
+        # Free bot - just conversation history
+        return {"history": [{"role": "system", "content": system_prompt}]}
+
+    # Freemium bot - add usage tracking
+    return {
+        "history": [{"role": "system", "content": system_prompt}],
+        "daily_usage": {"count": 0, "date": "", "limit": bot_config["daily_limit"]},
+        "is_premium": False
+    }
+
+async def check_user_access(user_data: dict, update: Update, bot_config: dict) -> bool:
+    """Check if user can send messages based on bot type and usage."""
+
+    # If no bot_config, it's a free bot - always allow
+    if not bot_config or "daily_limit" not in bot_config:
+        return True
+
+    # If user has premium, always allow
+    if user_data.get("is_premium", False):
+        return True
+
+    # Check daily limits for freemium bots
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    daily_usage = user_data["daily_usage"]
+
+    # Reset daily counter if it's a new day
+    if daily_usage["date"] != today:
+        daily_usage["count"] = 0
+        daily_usage["date"] = today
+
+    # Check if user has messages left
+    if daily_usage["count"] >= daily_usage["limit"]:
+        await send_upgrade_prompt(update, bot_config)
+        return False
+
+    # Increment usage counter
+    daily_usage["count"] += 1
+    return True
+
+async def send_upgrade_prompt(update: Update, bot_config: dict):
+    """Send upgrade message when user hits daily limit."""
+    price_stars = bot_config.get("premium_price_stars", 100)
+    price_usd = price_stars / 100
+
+    keyboard = await create_upgrade_keyboard(bot_config)
+
+    await update.message.reply_text(
+        f"🤖 <b>Daily limit reached!</b>\n\n"
+        f"You've used your {bot_config['daily_limit']} free messages today.\n"
+        f"Come back tomorrow, or upgrade to Premium for unlimited chats!\n\n"
+        f"✨ <b>Premium: ${price_usd:.2f}/month</b>\n"
+        f"• Unlimited daily conversations\n\n"
+        f"Tap the button below to get started! ⭐",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /start command."""
     user_id = str(update.effective_user.id)
     logger.info(f"User {user_id} started the bot")
     conversations = context.bot_data["conversations"]
-    conversations[user_id] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
+    bot_config = context.bot_data.get("bot_config")
+
+    conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
     await update.message.reply_text("Hi! How can I help you today?")
 
 def markdown_to_telegram_html(text):
@@ -137,6 +201,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for incoming messages."""
     try:
         user_id = str(update.effective_user.id)
+
+        # Check if this is a successful payment
+        if update.message.successful_payment:
+            await handle_successful_payment(update, context)
+            return
+
         user_message = update.message.text
         logger.info(f"Received message from {user_id}: {user_message}")
 
@@ -144,7 +214,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Get conversation history from persistent storage
         conversations = context.bot_data["conversations"]
-        history = conversations.get(user_id, [{"role": "system", "content": context.bot_data["system_prompt"]}])
+        bot_config = context.bot_data.get("bot_config")
+
+        # Initialize user data if not exists
+        if user_id not in conversations:
+            conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
+
+        user_data = conversations[user_id]
+
+        # Check if user can send messages
+        if not await check_user_access(user_data, update, bot_config):
+            return
+
+        history = user_data["history"]
 
         # Append the user's message
         history.append({"role": "user", "content": user_message})
@@ -181,7 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             history = [history[0]] + history[-(MAX_CONVERSATION_HISTORY-1):]  # Keep system prompt + last (MAX-1) messages
 
         # Save the updated conversation history
-        conversations[user_id] = history
+        user_data["history"] = history
 
         logger.info(f"Sending response to user {user_id}")
         await update.message.reply_text(html_response, parse_mode="HTML")
@@ -264,24 +346,26 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for the /clear command."""
     user_id = str(update.effective_user.id)
     conversations = context.bot_data["conversations"]
+    bot_config = context.bot_data.get("bot_config")
 
-    # Reset the conversation to just the system prompt
-    conversations[user_id] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
+    # Reset the conversation but keep usage tracking
+    if user_id in conversations:
+        conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
 
     logger.info(f"Cleared conversation history for user {user_id}")
     await update.message.reply_text("Conversation history has been cleared!")
 
-# In the initialize_bot function, add the new handler:
-async def initialize_bot(token: str, model_client, system_prompt: str, conversations):
+async def initialize_bot(token: str, model_client, system_prompt: str, conversations, bot_config: dict = None):
     application = Application.builder().token(token).build()
     application.bot_data["model_client"] = model_client
     application.bot_data["system_prompt"] = system_prompt
     application.bot_data["conversations"] = conversations
+    application.bot_data["bot_config"] = bot_config
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear))  # Add this line
+    application.add_handler(CommandHandler("clear", clear))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
+    application.add_handler(CallbackQueryHandler(handle_upgrade_callback, pattern="^upgrade_premium_"))
     await application.initialize()
     return application
