@@ -8,7 +8,7 @@ import time
 from html import escape as html_escape
 import os
 from datetime import datetime, timezone
-from .payments import create_upgrade_keyboard, handle_upgrade_callback, handle_successful_payment
+from .payments import create_upgrade_keyboard, handle_successful_payment
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,8 @@ async def send_upgrade_prompt(update: Update, bot_config: dict):
     price_stars = bot_config.get("premium_price_stars", 100)
     price_usd = price_stars / 100
 
-    keyboard = await create_upgrade_keyboard(bot_config)
+    # Pass the bot instance to create_upgrade_keyboard
+    keyboard = await create_upgrade_keyboard(bot_config, update.get_bot())
 
     await update.message.reply_text(
         f"🤖 <b>Daily limit reached!</b>\n\n"
@@ -391,6 +392,6 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(handle_upgrade_callback, pattern="^upgrade_premium_"))
+
     await application.initialize()
     return application

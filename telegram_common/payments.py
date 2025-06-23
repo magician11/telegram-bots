@@ -4,43 +4,21 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 
 logger = logging.getLogger(__name__)
 
-async def create_upgrade_keyboard(bot_config: dict) -> InlineKeyboardMarkup:
-    """Create inline keyboard for upgrade prompt."""
+async def create_upgrade_keyboard(bot_config: dict, bot) -> InlineKeyboardMarkup:
+    """Create inline keyboard for upgrade prompt with direct URL button."""
     price_stars = bot_config.get("premium_price_stars", 100)
     price_usd = price_stars / 100
+
+    # Create the subscription link immediately
+    invoice_link = await create_subscription_invoice(bot, price_stars, bot_config)
 
     keyboard = [
         [InlineKeyboardButton(
             f"⭐ Upgrade for ${price_usd:.2f}/month",
-            callback_data=f"upgrade_premium_{price_stars}"
+            url=invoice_link
         )]
     ]
     return InlineKeyboardMarkup(keyboard)
-
-async def handle_upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle upgrade button press."""
-    query = update.callback_query
-    await query.answer()
-
-    if query.data.startswith("upgrade_premium_"):
-        price_stars = int(query.data.split("_")[-1])
-        bot_config = context.bot_data.get("bot_config", {})
-
-        # Create subscription invoice link
-        invoice_link = await create_subscription_invoice(
-            context.bot,
-            price_stars,
-            bot_config
-        )
-
-        await query.edit_message_text(
-            f"🎉 <b>Ready to upgrade!</b>\n\n"
-            f"Tap the link below to subscribe with Telegram Stars:\n\n"
-            f"💫 <a href='{invoice_link}'>Subscribe for ${price_stars/100:.2f}/month</a>\n\n"
-            f"After payment, you'll have unlimited access immediately!",
-            parse_mode="HTML",
-            disable_web_page_preview=True
-        )
 
 async def create_subscription_invoice(bot, price_stars: int, bot_config: dict) -> str:
     """Create a subscription invoice link."""
@@ -62,7 +40,8 @@ async def create_subscription_invoice(bot, price_stars: int, bot_config: dict) -
         return invoice_link
     except Exception as e:
         logger.error(f"Error creating subscription invoice: {str(e)}")
-        return "https://t.me/your_bot"  # Fallback
+        bot_info = await bot.get_me()
+        return f"https://t.me/{bot_info.username}"  # Fallback
 
 async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle successful payment webhook."""
@@ -78,10 +57,12 @@ async def handle_successful_payment(update: Update, context: ContextTypes.DEFAUL
             conversations[user_id]["is_premium"] = True
             logger.info(f"Upgraded user {user_id} to premium")
 
+        bot_name_info = await context.bot.get_my_name()
+
         await update.message.reply_text(
             "🎉 <b>Welcome to Premium!</b>\n\n"
             "You now have unlimited daily conversations! "
-            "Thank you for supporting the bot! 💫",
+            f"Thank you for supporting {bot_name_info.name}! 💫",
             parse_mode="HTML"
         )
 
