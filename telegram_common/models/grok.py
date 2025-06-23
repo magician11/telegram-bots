@@ -31,7 +31,7 @@ class GrokClient(ModelClient):
                 }
             }
 
-            logger.info(f"Calling Grok API with search_mode={self.search_mode}")
+            logger.info(f"Full API params: {api_params}")
 
             response = self.client.chat.completions.create(**api_params)
 
