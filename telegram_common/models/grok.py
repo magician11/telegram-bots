@@ -39,6 +39,11 @@ class GrokClient(ModelClient):
             logger.info(f"Full API params: {api_params}")
 
             response = requests.post(url, headers=headers, json=api_params)
+
+            # Log response details
+            logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response body: {response.text}")
+
             response.raise_for_status()
             response_data = response.json()
 
