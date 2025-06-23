@@ -6,7 +6,7 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 class GrokClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "grok-3-mini", search_mode: str = "auto"):
+    def __init__(self, api_key: str, model_name: str = "grok-3-latest", search_mode: str = "auto"):
         self.client = OpenAI(
             api_key=api_key,
             base_url="https://api.x.ai/v1"
