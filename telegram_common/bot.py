@@ -15,46 +15,45 @@ logger = logging.getLogger(__name__)
 MAX_CONVERSATION_HISTORY = 22
 PROCESSED_UPDATES_EXPIRY = 3600  # 1 hour = 3600 seconds
 
+def reset_daily_usage_if_new_day(user_data: dict) -> None:
+    """Reset daily usage counter if it's a new day."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if user_data["daily_usage"]["date"] != today:
+        user_data["daily_usage"]["count"] = 0
+        user_data["daily_usage"]["date"] = today
+
 def init_user_data(system_prompt: str, bot_config: dict = None):
     """Initialize user data structure."""
-    if not bot_config or "daily_limit" not in bot_config:
-        # Free bot - just conversation history
-        return {"history": [{"role": "system", "content": system_prompt}]}
-
-    # Freemium bot - add usage tracking
     return {
         "history": [{"role": "system", "content": system_prompt}],
-        "daily_usage": {"count": 0, "date": "", "limit": bot_config["daily_limit"]},
+        "daily_usage": {
+            "count": 0,
+            "date": "",
+            "limit": (bot_config or {}).get("daily_limit", float('inf'))
+        },
         "is_premium": False
     }
 
-async def check_user_access(user_data: dict, update: Update, bot_config: dict) -> bool:
-    """Check if user can send messages based on bot type and usage."""
-
-    # If no bot_config, it's a free bot - always allow
-    if not bot_config or "daily_limit" not in bot_config:
-        return True
+async def check_user_access(user_data: dict, update: Update, bot_config: dict = None) -> bool:
+    """Check if user can send messages based on usage."""
 
     # If user has premium, always allow
     if user_data.get("is_premium", False):
         return True
 
-    # Check daily limits for freemium bots
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    daily_usage = user_data["daily_usage"]
+    # Reset usage if new day
+    reset_daily_usage_if_new_day(user_data)
 
-    # Reset daily counter if it's a new day
-    if daily_usage["date"] != today:
-        daily_usage["count"] = 0
-        daily_usage["date"] = today
-
-    # Check if user has messages left
-    if daily_usage["count"] >= daily_usage["limit"]:
-        await send_upgrade_prompt(update, bot_config)
+    # Check if user has messages left (handles both free and freemium bots)
+    if user_data["daily_usage"]["count"] >= user_data["daily_usage"]["limit"]:
+        # Only show upgrade prompt if there's actually a limit configured
+        if bot_config and "daily_limit" in bot_config:
+            await send_upgrade_prompt(update, bot_config)
         return False
 
     # Increment usage counter
-    daily_usage["count"] += 1
+    user_data["daily_usage"]["count"] += 1
     return True
 
 async def send_upgrade_prompt(update: Update, bot_config: dict):
@@ -356,6 +355,7 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Only reset the conversation history, keep daily_usage and is_premium
         user_data["history"] = [{"role": "system", "content": context.bot_data["system_prompt"]}]
+        reset_daily_usage_if_new_day(user_data)
         conversations[user_id] = user_data  # Force Modal Dict save
 
         # Create appropriate response message
