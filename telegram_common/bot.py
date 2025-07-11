@@ -384,7 +384,7 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def initialize_bot(token: str, model_client, system_prompt: str, conversations, bot_config: dict = None):
     application = Application.builder().token(token).build()
     application.bot_data["model_client"] = model_client
-    application.bot_data["system_prompt"] = f"{system_prompt} Keep responses conversational and short."
+    application.bot_data["system_prompt"] = f"{system_prompt} Keep responses conversational and max 11 sentences."
     application.bot_data["conversations"] = conversations
     application.bot_data["bot_config"] = bot_config
 
