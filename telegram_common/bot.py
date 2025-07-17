@@ -105,7 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
     else:
-        await update.message.reply_text("Hi! How can I help you today?")
+        await update.message.reply_text("Hi! What's your name? And how can I help you today?")
 
 def markdown_to_telegram_html(text):
     """
