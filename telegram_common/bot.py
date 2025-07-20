@@ -1,15 +1,15 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
-from telegram import Update,Voice, Audio
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import Update
 from telegram.ext import ContextTypes
 from fastapi import Request
 import logging
 import re
 import time
+import base64
 from html import escape as html_escape
 import os
 from datetime import datetime, timezone
 from .audio_utils import AudioFileManager, validate_audio_size, format_file_size
-import tempfile
 from io import BytesIO
 from .payments import create_upgrade_keyboard, handle_successful_payment
 
@@ -219,90 +219,135 @@ def markdown_to_telegram_html(text):
 
     return pattern.sub(replace_match, processed_text)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for incoming messages."""
+async def process_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message_content, message_type: str = "text"):
+    """Shared message processing logic for text, photos, etc."""
     try:
         user_id = str(update.effective_user.id)
-
-        # Check if this is a successful payment
-        if update.message.successful_payment:
-            await handle_successful_payment(update, context)
-            return
-
-        user_message = update.message.text
-        logger.info(f"Received message from {user_id}: {user_message}")
+        logger.info(f"Processing {message_type} message from {user_id}")
 
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-        # Get conversation history from persistent storage
+        # Get conversation data
         conversations = context.bot_data["conversations"]
         bot_config = context.bot_data.get("bot_config")
 
-        # Initialize user data if not exists
+        # Initialize user data if needed
         if user_id not in conversations:
             conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
 
         user_data = conversations[user_id]
 
-        # Check if user can send messages
+        # Check usage limits
         if not await check_user_access(user_data, update, bot_config):
             return
 
+        # Add message to history
         history = user_data["history"]
+        history.append({"role": "user", "content": message_content})
 
-        # Append the user's message
-        history.append({"role": "user", "content": user_message})
-
-        # Log the full conversation history
+        # Log conversation history
         logger.info(f"Current conversation history for user {user_id}:")
         for idx, msg in enumerate(history):
-            logger.info(f"  [{idx}] {msg['role']}: {msg['content']}")
+            content_preview = str(msg['content'])[:100] if isinstance(msg['content'], str) else "[complex content]"
+            logger.info(f"  [{idx}] {msg['role']}: {content_preview}")
 
-        # Generate a response using the model client
+        # Generate response
         model_client = context.bot_data["model_client"]
-        logger.info(f"Calling model API with user message: {user_message}")
+        logger.info(f"Calling model API for {message_type} message")
 
-        # Improved error handling for model responses
         try:
-            response_text = await model_client.generate_response(user_message, history)
+            response_text = await model_client.generate_response("", history)
             if not response_text or response_text.strip() == "":
                 logger.error("Received empty response from model API")
                 raise ValueError("Empty response from API")
             logger.info(f"Bot response: {response_text} ({len(response_text)} characters)")
         except Exception as e:
             logger.error(f"Error getting response from model: {str(e)}")
-            raise  # Re-raise to be caught by the outer try/except
+            raise
 
-        # Convert Markdown to HTML
+        # Convert markdown to HTML and send
         html_response = markdown_to_telegram_html(response_text)
-        logger.info(f"HTML response: {html_response} ({len(html_response)} characters)")
-
-        # Append the assistant's response (store the original markdown version)
         history.append({"role": "assistant", "content": response_text})
 
-        # Trim the conversation history if it gets too long
+        # Trim history if needed
         if len(history) > MAX_CONVERSATION_HISTORY:
-            history = [history[0]] + history[-(MAX_CONVERSATION_HISTORY-1):]  # Keep system prompt + last (MAX-1) messages
+            history = [history[0]] + history[-(MAX_CONVERSATION_HISTORY-1):]
 
-        # Save the updated conversation history
+        # Save updated conversation
         user_data["history"] = history
         conversations[user_id] = user_data
 
         logger.info(f"Sending response to user {user_id}")
         await update.message.reply_text(html_response, parse_mode="HTML")
         logger.info(f"Response sent to user {user_id}")
+
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}, type: {type(e).__name__}")
+        logger.error(f"Error processing {message_type} message: {str(e)}, type: {type(e).__name__}")
         await update.message.reply_text("Sorry, I'm having trouble right now. Could you try again in a moment?")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for text messages."""
+    if update.message.successful_payment:
+        await handle_successful_payment(update, context)
+        return
+
+    user_message = update.message.text
+    await process_user_message(update, context, user_message, "text")
+
+async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for photo messages with optional caption."""
+    try:
+        photo = update.message.photo[-1]  # Get largest size
+        caption = update.message.caption or "What do you see in this image?"
+
+        # Validate file size (20MB as per X.AI docs)
+        max_size = 20 * 1024 * 1024
+        if photo.file_size > max_size:
+            await update.message.reply_text(
+                f"Image too large ({format_file_size(photo.file_size)}). Please send a smaller image (max 20MB)."
+            )
+            return
+
+        # Check if model supports vision
+        model_client = context.bot_data["model_client"]
+        if not hasattr(model_client, 'supports_vision') or not model_client.supports_vision():
+            await update.message.reply_text(
+                "Sorry, this bot doesn't support image analysis. Please send text messages instead."
+            )
+            return
+
+        # Download and encode image
+        try:
+            file = await context.bot.get_file(photo.file_id)
+            file_bytes = await file.download_as_bytearray()
+            base64_image = base64.b64encode(file_bytes).decode('utf-8')
+        except Exception as e:
+            logger.error(f"Error downloading/encoding image: {str(e)}")
+            await update.message.reply_text("Sorry, I couldn't process that image. Please try again.")
+            return
+
+        # Create vision message content
+        content = [
+            {"type": "text", "text": caption},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+        ]
+
+        # Use shared processor
+        await process_user_message(update, context, content, "photo")
+
+    except Exception as e:
+        logger.error(f"Error processing photo message: {str(e)}")
+        await update.message.reply_text("Sorry, I had trouble processing your image. Please try again.")
 
 async def webhook_handler(request: Request, token: str, application, processed_updates):
     """Handle incoming webhook updates with protection against race conditions."""
     if token != os.environ.get("TELEGRAM_TOKEN"):
         return {"error": "Invalid token"}
 
+    current_time = time.time()
+
     try:
         update_data = await request.json()
-        current_time = time.time()
 
         # Clean up old entries
         expired_keys = []
@@ -556,9 +601,10 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
         application.add_handler(MessageHandler(filters.AUDIO, handle_voice_message))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_to_speech))
     else:
-        # Regular chat bot: ONLY text conversation, no speech features
+        # Regular chat bot: ONLY text and images conversation, no speech features
         logger.info("Initializing regular chat bot handlers")
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
 
     await application.initialize()
     return application
