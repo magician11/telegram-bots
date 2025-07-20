@@ -6,11 +6,10 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 class GrokClient(ModelClient):
-    def __init__(self, api_key: str, search_mode: str = "auto", max_completion_tokens: int = 555):
+    def __init__(self, api_key: str, search_mode: str = "auto"):
         self.api_key = api_key
         self.base_url = "https://api.x.ai/v1"
         self.model_name = "grok-4-latest"
-        self.max_completion_tokens = max_completion_tokens
 
         # Validate search_mode parameter
         valid_options = ["auto", "on", "off"]
@@ -34,13 +33,11 @@ class GrokClient(ModelClient):
             api_params = {
                 "model": self.model_name,
                 "messages": history,
-                "max_completion_tokens": self.max_completion_tokens,
                 "search_parameters": {
                     "mode": self.search_mode
                 }
             }
 
-            logger.info(f"API call with max_completion_tokens: {self.max_completion_tokens}")
             response = requests.post(url, headers=headers, json=api_params)
 
             logger.info(f"Response status: {response.status_code}")
