@@ -6,7 +6,7 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 class GrokClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "grok-3-latest", search_mode: str = "auto", max_tokens: int = 555):
+    def __init__(self, api_key: str, model_name: str = "grok-4-latest", search_mode: str = "auto", max_tokens: int = 555):
         self.api_key = api_key
         self.base_url = "https://api.x.ai/v1"
         self.model_name = model_name
