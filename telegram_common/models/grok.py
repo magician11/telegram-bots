@@ -46,6 +46,7 @@ class GrokClient(ModelClient):
             logger.info(f"Response status: {response.status_code}")
             response.raise_for_status()
 
+            logger.info(f"Full API response: {response.text}")
             response_data = response.json()
             content = response_data["choices"][0]["message"]["content"].strip()
 
