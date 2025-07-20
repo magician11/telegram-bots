@@ -37,15 +37,12 @@ def init_user_data(system_prompt: str, bot_config: dict = None):
         "history": history,
         "daily_usage": {
             "count": 0,
-            "date": "",
-            "limit": (bot_config or {}).get("daily_limit", float('inf'))
+            "date": ""
         },
         "is_premium": False
     }
 
 async def check_user_access(user_data: dict, update: Update, bot_config: dict = None) -> bool:
-    """Check if user can send messages based on usage."""
-
     # If user has premium, always allow
     if user_data.get("is_premium", False):
         return True
@@ -53,9 +50,11 @@ async def check_user_access(user_data: dict, update: Update, bot_config: dict = 
     # Reset usage if new day
     reset_daily_usage_if_new_day(user_data)
 
-    # Check if user has messages left (handles both free and freemium bots)
-    if user_data["daily_usage"]["count"] >= user_data["daily_usage"]["limit"]:
-        # Only show upgrade prompt if there's actually a limit configured
+    # Get current limit from bot_config, not stored user data
+    current_limit = (bot_config or {}).get("daily_limit", float('inf'))
+
+    # Check if user has messages left
+    if user_data["daily_usage"]["count"] >= current_limit:
         if bot_config and "daily_limit" in bot_config:
             await send_upgrade_prompt(update, bot_config)
         return False
@@ -444,7 +443,8 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             # Freemium user - show remaining count
             daily_usage = user_data["daily_usage"]
-            remaining = max(0, daily_usage["limit"] - daily_usage["count"])
+            current_limit = (bot_config or {}).get("daily_limit", float('inf'))
+            remaining = max(0, current_limit - daily_usage["count"])
             response_msg = (
                 f"Conversation history has been cleared!\n\n"
                 f"📊 You have {remaining} messages remaining today."
