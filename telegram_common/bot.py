@@ -247,7 +247,7 @@ async def process_user_message(update: Update, context: ContextTypes.DEFAULT_TYP
         # Log conversation history
         logger.info(f"Current conversation history for user {user_id}:")
         for idx, msg in enumerate(history):
-            content_preview = str(msg['content'])[:100] if isinstance(msg['content'], str) else "[complex content]"
+            content_preview = str(msg['content']) if isinstance(msg['content'], str) else "[complex content]"
             logger.info(f"  [{idx}] {msg['role']}: {content_preview}")
 
         # Generate response
