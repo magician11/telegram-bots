@@ -584,7 +584,7 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
         # For conversational bots, use provided system prompt or fallback
         if not system_prompt:
             system_prompt = "You are a helpful assistant."
-        application.bot_data["system_prompt"] = f"{system_prompt} Keep responses conversational and max 11 sentences."
+        application.bot_data["system_prompt"] = f"{system_prompt} Keep responses to a maximum of 11 sentences."
 
     application.bot_data["conversations"] = conversations
     application.bot_data["bot_config"] = bot_config
