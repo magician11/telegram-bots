@@ -461,17 +461,24 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response_msg)
 
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for voice messages - convert speech to text."""
+    """Handler for voice messages and audio files - convert speech to text."""
     try:
         user_id = str(update.effective_user.id)
-        voice = update.message.voice
 
-        logger.info(f"Received voice message from {user_id}: {voice.duration}s, {voice.file_size} bytes")
+        # Handle both voice messages and audio files
+        audio_obj = update.message.voice or update.message.audio
+
+        if not audio_obj:
+            logger.error("No voice or audio data found in message")
+            await update.message.reply_text("No audio data found in your message.")
+            return
+
+        logger.info(f"Received audio from {user_id}: {audio_obj.duration}s, {audio_obj.file_size} bytes")
 
         # Validate file size
-        if not validate_audio_size(voice.file_size):
+        if not validate_audio_size(audio_obj.file_size):
             await update.message.reply_text(
-                f"Voice message too large ({format_file_size(voice.file_size)}). "
+                f"Audio message too large ({format_file_size(audio_obj.file_size)}). "
                 f"Please send a shorter message (max 20MB)."
             )
             return
@@ -490,8 +497,8 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
         temp_file = None
         try:
-            # Download the voice file
-            file = await context.bot.get_file(voice.file_id)
+            # Download the audio file
+            file = await context.bot.get_file(audio_obj.file_id)
 
             # Create temporary file
             temp_file = AudioFileManager.create_temp_file(".ogg")
@@ -504,7 +511,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
             if transcription and transcription.strip():
                 # Send transcription with voice emoji
                 await update.message.reply_text(f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown")
-                logger.info(f"Transcribed voice message for user {user_id}: {len(transcription)} characters")
+                logger.info(f"Transcribed audio for user {user_id}: {len(transcription)} characters")
             else:
                 await update.message.reply_text("🤔 I couldn't understand the audio. Please try speaking more clearly.")
 
@@ -514,9 +521,9 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 AudioFileManager.cleanup_temp_file(temp_file.name)
 
     except Exception as e:
-        logger.error(f"Error processing voice message: {str(e)}")
+        logger.error(f"Error processing audio message: {str(e)}")
         await update.message.reply_text(
-            "Sorry, I had trouble processing your voice message. Please try again."
+            "Sorry, I had trouble processing your audio message. Please try again."
         )
 
 async def handle_text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
