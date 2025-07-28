@@ -473,7 +473,15 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("No audio data found in your message.")
             return
 
-        logger.info(f"Received audio from {user_id}: {audio_obj.duration}s, {audio_obj.file_size} bytes")
+        # Use original filename for audio files, default for voice messages
+        if update.message.audio and hasattr(audio_obj, 'file_name') and audio_obj.file_name:
+            filename = audio_obj.file_name
+            extension = os.path.splitext(filename)[1] or ".m4a"  # fallback if no extension
+        else:
+            filename = "voice.ogg"
+            extension = ".ogg"
+
+        logger.info(f"Received audio from {user_id}: {audio_obj.duration}s, {audio_obj.file_size} bytes, filename: {filename}")
 
         # Validate file size
         if not validate_audio_size(audio_obj.file_size):
@@ -500,13 +508,14 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
             # Download the audio file
             file = await context.bot.get_file(audio_obj.file_id)
 
-            # Create temporary file
-            temp_file = AudioFileManager.create_temp_file(".ogg")
+            # Create temporary file with correct extension
+            temp_file = AudioFileManager.create_temp_file(extension)
             await file.download_to_drive(temp_file.name)
+            temp_file.close()  # Close the file handle
 
-            # Transcribe the audio
+            # Transcribe the audio using original filename
             with open(temp_file.name, 'rb') as audio_file:
-                transcription = await model_client.transcribe_audio(audio_file, "voice.ogg")
+                transcription = await model_client.transcribe_audio(audio_file, filename)
 
             if transcription and transcription.strip():
                 # Send transcription with voice emoji
