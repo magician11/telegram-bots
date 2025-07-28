@@ -8,7 +8,7 @@ import time
 import base64
 from html import escape as html_escape
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from .audio_utils import AudioFileManager, validate_audio_size, format_file_size
 from io import BytesIO
 from .payments import create_upgrade_keyboard, handle_successful_payment
@@ -63,10 +63,30 @@ async def check_user_access(user_data: dict, update: Update, bot_config: dict = 
     user_data["daily_usage"]["count"] += 1
     return True
 
+def get_time_until_reset() -> str:
+    """Calculate time remaining until daily usage resets (midnight UTC)."""
+    now = datetime.now(timezone.utc)
+
+    # Calculate next midnight UTC
+    tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    time_remaining = tomorrow - now
+
+    # Extract hours and minutes
+    hours = int(time_remaining.total_seconds() // 3600)
+    minutes = int((time_remaining.total_seconds() % 3600) // 60)
+
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    else:
+        return f"{minutes}m"
+
 async def send_upgrade_prompt(update: Update, bot_config: dict):
     """Send upgrade message when user hits daily limit."""
     price_stars = bot_config.get("premium_price_stars", 100)
     price_usd = price_stars / 100
+
+    # Calculate time until reset
+    reset_time = get_time_until_reset()
 
     # Pass the bot instance to create_upgrade_keyboard
     keyboard = await create_upgrade_keyboard(bot_config, update.get_bot())
@@ -74,7 +94,8 @@ async def send_upgrade_prompt(update: Update, bot_config: dict):
     await update.message.reply_text(
         f"🤖 <b>Daily limit reached!</b>\n\n"
         f"You've used your {bot_config['daily_limit']} free messages today.\n"
-        f"Come back tomorrow, or upgrade to Premium for unlimited chats!\n\n"
+        f"⏰ Free messages reset in: <b>{reset_time}</b>\n\n"
+        f"Or upgrade to Premium for unlimited chats!\n\n"
         f"✨ <b>Premium: ${price_usd:.2f}/month</b>\n"
         f"• Unlimited daily conversations\n\n"
         f"Tap the button below to get started! ⭐",
