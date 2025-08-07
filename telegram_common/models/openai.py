@@ -6,7 +6,7 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 class OpenAIClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "gpt-4", max_tokens: int = 555, enable_speech: bool = False):
+    def __init__(self, api_key: str, model_name: str = "gpt-5", max_tokens: int = 555, enable_speech: bool = False):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
         self.max_tokens = max_tokens
