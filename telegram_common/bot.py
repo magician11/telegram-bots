@@ -116,7 +116,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     model_client = context.bot_data["model_client"]
     system_prompt = context.bot_data["system_prompt"]
 
-    conversations[user_id] = init_user_data(system_prompt, bot_config)
+    user_data = init_user_data(system_prompt, bot_config)
 
     if speech_only:
         await update.message.reply_text(
@@ -153,8 +153,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(opening_message, parse_mode="Markdown")
 
         # Record in conversation history so the AI knows what it asked
-        conversations[user_id]["history"].append({"role": "assistant", "content": opening_message})
+        user_data["history"].append({"role": "assistant", "content": opening_message})
         logger.info(f"Opening message sent and recorded for user {user_id}: {opening_message}")
+
+    conversations[user_id] = user_data
 
 def markdown_to_telegram_html(text):
     """
