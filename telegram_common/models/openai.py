@@ -6,20 +6,19 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 class OpenAIClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "gpt-5", max_tokens: int = 555, enable_speech: bool = False):
+    def __init__(self, api_key: str, model_name: str = "gpt-5", enable_speech: bool = False):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
-        self.max_tokens = max_tokens
+
         self.enable_speech = enable_speech
 
     async def generate_response(self, history: List[Dict]) -> str:
         try:
-            logger.info(f"OpenAI API call with max_tokens: {self.max_tokens}, model: {self.model_name}")
+            logger.info(f"OpenAI API call with model: {self.model_name}")
 
             response = self.client.chat.completions.create(
                 model=self.model_name,
-                messages=history,
-                max_tokens=self.max_tokens
+                messages=history
             )
 
             content = response.choices[0].message.content.strip()
