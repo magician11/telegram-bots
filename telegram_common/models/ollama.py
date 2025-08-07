@@ -60,7 +60,7 @@ class OllamaClient(ModelClient):
             logger.error(f"Error ensuring model availability: {str(e)}")
             return False
 
-    async def generate_response(self, prompt: str, history: List[Dict]) -> str:
+    async def generate_response(self, history: List[Dict]) -> str:
         """Generate a response using the Ollama API."""
         try:
             logger.info(f"Generating response for prompt: {prompt[:100]}...")  # Log first 100 chars

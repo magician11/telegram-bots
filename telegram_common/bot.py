@@ -55,6 +55,8 @@ async def check_user_access(user_data: dict, update: Update, bot_config: dict = 
 
     # Check if user has messages left
     if user_data["daily_usage"]["count"] >= current_limit:
+        user_id = update.effective_user.id
+        logger.info(f"User {user_id} hit daily message limit of {current_limit}.")
         if bot_config and "daily_limit" in bot_config:
             await send_upgrade_prompt(update, bot_config)
         return False
@@ -136,7 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
 
             logger.info(f"Generating personalized opening for user {user_id}")
-            opening_message = await model_client.generate_response("", opening_generation_prompt)
+            opening_message = await model_client.generate_response(opening_generation_prompt)
 
             # Fallback if generation fails or returns empty
             if not opening_message or opening_message.strip() == "":
@@ -303,7 +305,7 @@ async def process_user_message(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.info(f"Calling model API for {message_type} message")
 
         try:
-            response_text = await model_client.generate_response("", history)
+            response_text = await model_client.generate_response(history)
             if not response_text or response_text.strip() == "":
                 logger.error("Received empty response from model API")
                 raise ValueError("Empty response from API")

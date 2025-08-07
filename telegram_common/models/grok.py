@@ -21,7 +21,7 @@ class GrokClient(ModelClient):
         """Grok 4 models support vision."""
         return True  # Grok 4 always supports vision
 
-    async def generate_response(self, prompt: str, history: List[Dict]) -> str:
+    async def generate_response(self, history: List[Dict]) -> str:
         try:
             url = f"{self.base_url}/chat/completions"
             headers = {
