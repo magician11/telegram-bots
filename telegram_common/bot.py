@@ -111,8 +111,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_config = context.bot_data.get("bot_config")
     speech_only = context.bot_data.get("speech_only", False)
     bot_name = context.bot_data.get("bot_name", "Assistant")
+    model_client = context.bot_data["model_client"]
+    system_prompt = context.bot_data["system_prompt"]
 
-    conversations[user_id] = init_user_data(context.bot_data["system_prompt"], bot_config)
+    conversations[user_id] = init_user_data(system_prompt, bot_config)
 
     if speech_only:
         await update.message.reply_text(
@@ -125,7 +127,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
     else:
-        await update.message.reply_text("Hi! What's your name? And how can I help you today?")
+        # Generate AI-powered opening based on the bot's persona
+        try:
+            # Simple prompt that lets the AI's personality shine through
+            opening_generation_prompt = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "Generate a brief, friendly opening message for a new user. Ask for their name and how you can help them. Stay fully in character and be welcoming. Keep it under 60 words. You may use markdown formatting for emphasis."}
+            ]
+
+            logger.info(f"Generating personalized opening for user {user_id}")
+            opening_message = await model_client.generate_response("", opening_generation_prompt)
+
+            # Fallback if generation fails or returns empty
+            if not opening_message or opening_message.strip() == "":
+                opening_message = "Hi! What's your name? And how can I help you today?"
+                logger.warning(f"AI opening generation failed for user {user_id}, using fallback")
+
+        except Exception as e:
+            logger.error(f"Error generating opening for user {user_id}: {e}")
+            opening_message = "Hi! What's your name? And how can I help you today?"
+
+        # Send the opening message with markdown support
+        await update.message.reply_text(opening_message, parse_mode="Markdown")
+
+        # Record in conversation history so the AI knows what it asked
+        conversations[user_id]["history"].append({"role": "assistant", "content": opening_message})
+        logger.info(f"Opening message sent and recorded for user {user_id}: {opening_message}")
 
 def markdown_to_telegram_html(text):
     """
