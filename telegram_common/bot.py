@@ -290,9 +290,13 @@ async def send_long_message(update, context, text: str, parse_mode: str | None =
             while pos < len(s) and s[pos] in (" ", "\n"):
                 pos += 1
 
-    parts = [p for p in split_text(text, max_length) if p]
-    total = len(parts)
+    # ✅ Only split if text exceeds Telegram safe length
+    if len(text) <= max_length:
+        parts = [text]
+    else:
+        parts = [p for p in split_text(text, max_length) if p]
 
+    total = len(parts)
     chat_id = update.effective_chat.id
     prev_id = update.message.message_id
 
