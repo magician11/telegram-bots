@@ -30,7 +30,7 @@ class OpenAIClient(ModelClient):
             return "Sorry, I'm having trouble generating a response right now."
 
     async def transcribe_audio(self, audio_file: BinaryIO, filename: str = "audio.ogg") -> str:
-        """Transcribe audio using OpenAI Whisper."""
+        """Transcribe audio using OpenAI GPT-4o-mini-transcribe."""
         if not self.enable_speech:
             raise ValueError("Speech functionality not enabled for this client")
 
@@ -43,11 +43,11 @@ class OpenAIClient(ModelClient):
             transcript = self.client.audio.transcriptions.create(
                 model="gpt-4o-mini-transcribe",
                 file=(filename, audio_file, "audio/ogg"),
-                response_format="text"
             )
 
-            logger.info(f"Transcription successful: {len(transcript)} characters")
-            return transcript.strip()
+            text = transcript.text.strip()
+            logger.info(f"Transcription successful: {len(text)} characters")
+            return text
 
         except Exception as e:
             logger.error(f"Error transcribing audio: {str(e)}")

@@ -270,44 +270,41 @@ def markdown_to_telegram_html(text):
 
     return pattern.sub(replace_match, processed_text)
 
-async def send_long_message(update, context, text, parse_mode=None):
-    """Splits and sends long text in chunks, preserving whitespace and avoiding empty parts."""
+async def send_long_message(update, context, text: str, parse_mode: str | None = None):
+    """Split and send long text to Telegram in chunks, keeping paragraphs intact."""
     max_length = 3800
-    parts = []
-    current_pos = 0
-    text_length = len(text)
-    while current_pos < text_length:
-        end_pos = min(current_pos + max_length, text_length)
-        split_pos = text.rfind('\n\n', current_pos, end_pos)
-        if split_pos == -1:
-            split_pos = text.rfind('\n', current_pos, end_pos)
-        if split_pos == -1:
-            split_pos = text.rfind(' ', current_pos, end_pos)
-        if split_pos == -1:
-            split_pos = end_pos
-        part = text[current_pos:split_pos]
-        if part.strip():
-            parts.append(part)
-        current_pos = split_pos
-        if current_pos < text_length and text[current_pos] in (' ', '\n'):
-            current_pos += 1
-    if current_pos < text_length:
-        remaining = text[current_pos:]
-        if remaining.strip():
-            parts.append(remaining)
-    previous_message_id = update.message.message_id
+
+    def split_text(s: str, max_len: int):
+        pos = 0
+        while pos < len(s):
+            end = min(pos + max_len, len(s))
+            # try to break nicely
+            split = (s.rfind("\n\n", pos, end) or
+                     s.rfind("\n", pos, end) or
+                     s.rfind(" ", pos, end))
+            if split == -1 or split <= pos:
+                split = end
+            yield s[pos:split].strip()
+            pos = split
+            while pos < len(s) and s[pos] in (" ", "\n"):
+                pos += 1
+
+    parts = [p for p in split_text(text, max_length) if p]
+    total = len(parts)
+
     chat_id = update.effective_chat.id
-    total_parts = len(parts)
+    prev_id = update.message.message_id
+
     for i, part in enumerate(parts, 1):
-        message_text = f"Part {i}/{total_parts}:\n\n{part}" if total_parts > 1 else part
-        logger.info(f"Sending part {i}/{total_parts}: {len(message_text)} characters - preview: {message_text[:200]}...")
-        sent_message = await context.bot.send_message(
+        msg = f"Part {i}/{total}:\n\n{part}" if total > 1 else part
+        logger.info(f"Sending {i}/{total} ({len(msg)} chars): {msg[:150]}...")
+        sent = await context.bot.send_message(
             chat_id=chat_id,
-            text=message_text,
+            text=msg,
             parse_mode=parse_mode,
-            reply_to_message_id=previous_message_id
+            reply_to_message_id=prev_id,
         )
-        previous_message_id = sent_message.message_id
+        prev_id = sent.message_id
 
 async def process_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message_content, message_type: str = "text"):
     """Shared message processing logic for text, photos, etc."""
