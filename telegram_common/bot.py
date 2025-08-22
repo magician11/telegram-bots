@@ -270,6 +270,31 @@ def markdown_to_telegram_html(text):
 
     return pattern.sub(replace_match, processed_text)
 
+async def send_long_message(update, context, text, parse_mode=None):
+    max_length = 4000
+    parts = []
+    while len(text) > max_length:
+        split_pos = text.rfind('\n', 0, max_length)
+        if split_pos == -1:
+            split_pos = text.rfind(' ', 0, max_length)
+        if split_pos == -1:
+            split_pos = max_length
+        parts.append(text[:split_pos].rstrip())
+        text = text[split_pos:].lstrip()
+    if text:
+        parts.append(text)
+    previous_message_id = update.message.message_id
+    chat_id = update.effective_chat.id
+    for i, part in enumerate(parts, 1):
+        message_text = f"Part {i}/{len(parts)}:\n\n{part}" if len(parts) > 1 else part
+        sent_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
+            parse_mode=parse_mode,
+            reply_to_message_id=previous_message_id
+        )
+        previous_message_id = sent_message.message_id
+
 async def process_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message_content, message_type: str = "text"):
     """Shared message processing logic for text, photos, etc."""
     try:
@@ -571,7 +596,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
             if transcription and transcription.strip():
                 # Send transcription with voice emoji
-                await update.message.reply_text(f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown")
+                await send_long_message(update, context, f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown")
                 logger.info(f"Transcribed audio for user {user_id}: {len(transcription)} characters")
             else:
                 await update.message.reply_text("🤔 I couldn't understand the audio. Please try speaking more clearly.")
