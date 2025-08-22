@@ -721,7 +721,7 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
                 # Optional: Respond to non-audio documents
                 await update.message.reply_text("Sorry, I only handle audio files for transcription. Please send voice notes or audio files.")
 
-        application.add_handler(MessageHandler(filters.Document & ~filters.COMMAND, handle_document))
+        application.add_handler(MessageHandler(filters.DOCUMENT & ~filters.COMMAND, handle_document))
     else:
         # Regular chat bot: ONLY text and images conversation, no speech features
         logger.info("Initializing regular chat bot handlers")
