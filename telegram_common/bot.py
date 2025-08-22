@@ -710,6 +710,18 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
         application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
         application.add_handler(MessageHandler(filters.AUDIO, handle_voice_message))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_to_speech))
+
+        # New: Handle documents that are actually audio files
+        async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            doc = update.message.document
+            if doc and (doc.mime_type.startswith('audio/') or doc.file_name.lower().endswith(('.aac', '.m4a', '.mp3', '.ogg', '.wav', '.webm'))):
+                # Treat it like an audio message
+                await handle_voice_message(update, context)
+            else:
+                # Optional: Respond to non-audio documents
+                await update.message.reply_text("Sorry, I only handle audio files for transcription. Please send voice notes or audio files.")
+
+        application.add_handler(MessageHandler(filters.Document & ~filters.COMMAND, handle_document))
     else:
         # Regular chat bot: ONLY text and images conversation, no speech features
         logger.info("Initializing regular chat bot handlers")

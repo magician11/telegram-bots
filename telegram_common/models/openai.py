@@ -42,7 +42,7 @@ class OpenAIClient(ModelClient):
 
             transcript = self.client.audio.transcriptions.create(
                 model="gpt-4o-mini-transcribe",
-                file=(filename, audio_file, "audio/ogg"),
+                file=(filename, audio_file)
             )
 
             text = transcript.text.strip()
