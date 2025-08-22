@@ -271,22 +271,36 @@ def markdown_to_telegram_html(text):
     return pattern.sub(replace_match, processed_text)
 
 async def send_long_message(update, context, text, parse_mode=None):
-    max_length = 4000
+    """Splits and sends long text in chunks, preserving whitespace and avoiding empty parts."""
+    max_length = 3800
     parts = []
-    while len(text) > max_length:
-        split_pos = text.rfind('\n', 0, max_length)
+    current_pos = 0
+    text_length = len(text)
+    while current_pos < text_length:
+        end_pos = min(current_pos + max_length, text_length)
+        split_pos = text.rfind('\n\n', current_pos, end_pos)
         if split_pos == -1:
-            split_pos = text.rfind(' ', 0, max_length)
+            split_pos = text.rfind('\n', current_pos, end_pos)
         if split_pos == -1:
-            split_pos = max_length
-        parts.append(text[:split_pos].rstrip())
-        text = text[split_pos:].lstrip()
-    if text:
-        parts.append(text)
+            split_pos = text.rfind(' ', current_pos, end_pos)
+        if split_pos == -1:
+            split_pos = end_pos
+        part = text[current_pos:split_pos]
+        if part.strip():
+            parts.append(part)
+        current_pos = split_pos
+        if current_pos < text_length and text[current_pos] in (' ', '\n'):
+            current_pos += 1
+    if current_pos < text_length:
+        remaining = text[current_pos:]
+        if remaining.strip():
+            parts.append(remaining)
     previous_message_id = update.message.message_id
     chat_id = update.effective_chat.id
+    total_parts = len(parts)
     for i, part in enumerate(parts, 1):
-        message_text = f"Part {i}/{len(parts)}:\n\n{part}" if len(parts) > 1 else part
+        message_text = f"Part {i}/{total_parts}:\n\n{part}" if total_parts > 1 else part
+        logger.info(f"Sending part {i}/{total_parts}: {len(message_text)} characters - preview: {message_text[:200]}...")
         sent_message = await context.bot.send_message(
             chat_id=chat_id,
             text=message_text,
@@ -597,7 +611,8 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
             if transcription and transcription.strip():
                 # Send transcription with voice emoji
                 await send_long_message(update, context, f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown")
-                logger.info(f"Transcribed audio for user {user_id}: {len(transcription)} characters")
+                logger.info(f"Full transcription for user {user_id}: {transcription}")
+                logger.info(f"Transcription length: {len(transcription)} characters")
             else:
                 await update.message.reply_text("🤔 I couldn't understand the audio. Please try speaking more clearly.")
 
