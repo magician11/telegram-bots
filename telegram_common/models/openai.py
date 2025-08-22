@@ -1,7 +1,9 @@
 from openai import OpenAI
 from typing import List, Dict, BinaryIO
 import logging
+import os
 from .base import ModelClient
+from telegram_common.audio_utils import AudioFileManager
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +36,21 @@ class OpenAIClient(ModelClient):
         if not self.enable_speech:
             raise ValueError("Speech functionality not enabled for this client")
 
+        temp_file = None
+        converted_path = None
         try:
             logger.info(f"Transcribing audio file: {filename}")
 
             # Ensure file pointer is at the beginning
             audio_file.seek(0)
+
+            # If it's AAC, convert to supported format
+            if filename.lower().endswith('.aac'):
+                logger.info(f"AAC detected - converting to supported format")
+                temp_file = AudioFileManager.bytes_to_file(audio_file.read(), suffix=".aac")
+                converted_path = AudioFileManager.convert_to_supported_format(temp_file.name)
+                audio_file = open(converted_path, 'rb')  # Reopen as BinaryIO
+                filename = os.path.basename(converted_path)  # Update filename for OpenAI
 
             transcript = self.client.audio.transcriptions.create(
                 model="gpt-4o-mini-transcribe",
@@ -52,6 +64,12 @@ class OpenAIClient(ModelClient):
         except Exception as e:
             logger.error(f"Error transcribing audio: {str(e)}")
             return "Sorry, I couldn't transcribe that audio. Please try again."
+        finally:
+            # Cleanup temp files
+            if temp_file:
+                AudioFileManager.cleanup_temp_file(temp_file.name)
+            if converted_path:
+                AudioFileManager.cleanup_temp_file(converted_path)
 
     async def generate_speech(self, text: str, voice: str = "alloy") -> bytes:
         """Generate speech from text using OpenAI TTS."""
