@@ -553,81 +553,53 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Cleared conversation history for user {user_id}")
     await update.message.reply_text(response_msg)
 
-async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for voice messages and audio files - convert speech to text."""
-    try:
-        user_id = str(update.effective_user.id)
+async def process_audio(update: Update, context: ContextTypes.DEFAULT_TYPE, audio_obj):
+    """Shared logic for downloading, validating, and transcribing audio."""
+    user_id = str(update.effective_user.id)
+    logger.info(f"Received audio from {user_id}: {audio_obj.file_size} bytes")
 
-        # Handle both voice messages and audio files
-        audio_obj = update.message.voice or update.message.audio
-
-        if not audio_obj:
-            logger.error("No voice or audio data found in message")
-            await update.message.reply_text("No audio data found in your message.")
-            return
-
-        # Use original filename for audio files, default for voice messages
-        if update.message.audio and hasattr(audio_obj, 'file_name') and audio_obj.file_name:
-            filename = audio_obj.file_name
-            extension = os.path.splitext(filename)[1] or ".m4a"  # fallback if no extension
-        else:
-            filename = "voice.ogg"
-            extension = ".ogg"
-
-        logger.info(f"Received audio from {user_id}: {audio_obj.duration}s, {audio_obj.file_size} bytes, filename: {filename}")
-
-        # Validate file size
-        if not validate_audio_size(audio_obj.file_size):
-            await update.message.reply_text(
-                f"Audio message too large ({format_file_size(audio_obj.file_size)}). "
-                f"Please send a shorter message (max 20MB)."
-            )
-            return
-
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-
-        # Get the model client
-        model_client = context.bot_data["model_client"]
-
-        # Check if speech is enabled
-        if not hasattr(model_client, 'enable_speech') or not model_client.enable_speech:
-            await update.message.reply_text(
-                "🎙️ Speech processing is not enabled for this bot."
-            )
-            return
-
-        temp_file = None
-        try:
-            # Download the audio file
-            file = await context.bot.get_file(audio_obj.file_id)
-
-            # Create temporary file with correct extension
-            temp_file = AudioFileManager.create_temp_file(extension)
-            await file.download_to_drive(temp_file.name)
-            temp_file.close()  # Close the file handle
-
-            # Transcribe the audio using original filename
-            with open(temp_file.name, 'rb') as audio_file:
-                transcription = await model_client.transcribe_audio(audio_file, filename)
-
-            if transcription and transcription.strip():
-                # Send transcription with voice emoji
-                await send_long_message(update, context, f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown")
-                logger.info(f"Full transcription for user {user_id}: {transcription}")
-                logger.info(f"Transcription length: {len(transcription)} characters")
-            else:
-                await update.message.reply_text("🤔 I couldn't understand the audio. Please try speaking more clearly.")
-
-        finally:
-            # Cleanup
-            if temp_file:
-                AudioFileManager.cleanup_temp_file(temp_file.name)
-
-    except Exception as e:
-        logger.error(f"Error processing audio message: {str(e)}")
+    if not validate_audio_size(audio_obj.file_size):
         await update.message.reply_text(
-            "Sorry, I had trouble processing your audio message. Please try again."
+            f"Audio too large ({format_file_size(audio_obj.file_size)}). Max 20MB."
         )
+        return
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+    model_client = context.bot_data["model_client"]
+    if not getattr(model_client, "enable_speech", False):
+        await update.message.reply_text("🎙️ Speech processing is not enabled for this bot.")
+        return
+
+    extension = os.path.splitext(getattr(audio_obj, "file_name", "") or "")[1] or ".ogg"
+    temp_file = AudioFileManager.create_temp_file(extension)
+
+    try:
+        file = await context.bot.get_file(audio_obj.file_id)
+        await file.download_to_drive(temp_file.name)
+
+        with open(temp_file.name, "rb") as f:
+            transcription = await model_client.transcribe_audio(
+                f, getattr(audio_obj, "file_name", "voice.ogg")
+            )
+
+        if transcription and transcription.strip():
+            await send_long_message(
+                update, context, f"🎙️ *Transcription:*\n\n{transcription}", parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("🤔 I couldn't understand the audio. Please try again.")
+    finally:
+        AudioFileManager.cleanup_temp_file(temp_file.name)
+
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle native voice messages and audio files."""
+    audio_obj = update.message.voice or update.message.audio
+    if not audio_obj:
+        await update.message.reply_text("No audio data found in your message.")
+        return
+
+    await process_audio(update, context, audio_obj)
 
 async def handle_text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for text messages - convert ALL text to speech."""
@@ -711,17 +683,22 @@ async def initialize_bot(token: str, model_client, system_prompt: str, conversat
         application.add_handler(MessageHandler(filters.AUDIO, handle_voice_message))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_to_speech))
 
-        # New: Handle documents that are actually audio files
         async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Handle audio files sent as documents (e.g., .aac, .mp3)."""
             doc = update.message.document
-            if doc and (doc.mime_type.startswith('audio/') or doc.file_name.lower().endswith(('.aac', '.m4a', '.mp3', '.ogg', '.wav', '.webm'))):
-                # Treat it like an audio message
-                await handle_voice_message(update, context)
-            else:
-                # Optional: Respond to non-audio documents
-                await update.message.reply_text("Sorry, I only handle audio files for transcription. Please send voice notes or audio files.")
+            if not doc:
+                return
 
-        application.add_handler(MessageHandler(filters.DOCUMENT & ~filters.COMMAND, handle_document))
+            if not (
+                doc.mime_type.startswith("audio/") or
+                doc.file_name.lower().endswith((".aac", ".m4a", ".mp3", ".ogg", ".wav", ".webm"))
+            ):
+                await update.message.reply_text("Sorry, I only handle audio files for transcription.")
+                return
+
+            await process_audio(update, context, doc)
+
+        application.add_handler(MessageHandler(filters.Document.ALL & ~filters.COMMAND, handle_document))
     else:
         # Regular chat bot: ONLY text and images conversation, no speech features
         logger.info("Initializing regular chat bot handlers")
