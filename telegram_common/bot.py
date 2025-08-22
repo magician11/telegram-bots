@@ -278,13 +278,14 @@ async def send_long_message(update, context, text: str, parse_mode: str | None =
         pos = 0
         while pos < len(s):
             end = min(pos + max_len, len(s))
-            # try to break nicely
-            split = (s.rfind("\n\n", pos, end) or
-                     s.rfind("\n", pos, end) or
-                     s.rfind(" ", pos, end))
+            split = max(s.rfind("\n\n", pos, end),
+                        s.rfind("\n", pos, end),
+                        s.rfind(" ", pos, end))
             if split == -1 or split <= pos:
                 split = end
-            yield s[pos:split].strip()
+            chunk = s[pos:split].strip()
+            if chunk:  # ✅ only yield if not empty
+                yield chunk
             pos = split
             while pos < len(s) and s[pos] in (" ", "\n"):
                 pos += 1
