@@ -9,7 +9,7 @@ class GrokClient(ModelClient):
     def __init__(self, api_key: str, search_mode: str = "auto"):
         self.api_key = api_key
         self.base_url = "https://api.x.ai/v1"
-        self.model_name = "grok-4-latest"
+        self.model_name = "grok-4-fast"
 
         # Validate search_mode parameter
         valid_options = ["auto", "on", "off"]
