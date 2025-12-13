@@ -8,7 +8,7 @@ from telegram_common.audio_utils import AudioFileManager
 logger = logging.getLogger(__name__)
 
 class OpenAIClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "gpt-5", enable_speech: bool = False):
+    def __init__(self, api_key: str, model_name: str = "gpt-5.2", enable_speech: bool = False):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
 
