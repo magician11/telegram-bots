@@ -43,17 +43,23 @@ class GrokClient(ModelClient):
             response.raise_for_status()
 
             response_data = response.json()
+            logger.info(f"Full response structure: {response_data}")
 
-            # Parse the response
-            content_blocks = response_data.get("output", [{}])[0].get("content", [])
-            content = "".join(
-                block.get("text", "")
-                for block in content_blocks
-                if block.get("type") == "output_text"
-            ).strip()
+            output = response_data.get("output", [])
 
+            # Collect all text from all output items
+            all_text = []
+            for item in output:
+                if item.get("type") == "message":
+                    content_blocks = item.get("content", [])
+                    for block in content_blocks:
+                        if block.get("type") == "output_text":
+                            all_text.append(block.get("text", ""))
+
+            content = "".join(all_text).strip()
             logger.info(f"Response length: {len(content)} characters")
-            return content
+
+            return content if content else "I couldn't generate a response."
 
         except Exception as e:
             logger.error(f"Error generating Grok response: {str(e)}")
