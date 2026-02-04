@@ -1,10 +1,12 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="telegram-common",  # Package name (hyphenated)
-    version="1.0.0",  # Version of your package
+    version="1.0.1",  # Version of your package
     description="A shared Python package for reusable Telegram bot functionality.",
-    long_description=open("README.md").read(),  # Read the long description from README.md
+    long_description=open(
+        "README.md"
+    ).read(),  # Read the long description from README.md
     long_description_content_type="text/markdown",  # Specify the format of the long description
     author="Andrew Golightly",
     author_email="support@golightlyplus.com",
@@ -17,8 +19,8 @@ setup(
         "requests",
     ],
     entry_points={
-        'console_scripts': [
-        'telegram-set-webhook=telegram_common.cli.set_webhook:main',
+        "console_scripts": [
+            "telegram-set-webhook=telegram_common.cli.set_webhook:main",
         ],
     },
     classifiers=[  # Metadata about your package
