@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Dict, List
 
 import requests
@@ -33,17 +34,14 @@ class GrokClient(ModelClient):
                 "store": False,
             }
 
-            logger.info(f"Request payload: {api_params}")
-
             response = requests.post(url, headers=headers, json=api_params)
             logger.info(f"Response status: {response.status_code}")
+
             if response.status_code != 200:
                 logger.error(f"Error response body: {response.text}")
 
             response.raise_for_status()
-
             response_data = response.json()
-            logger.info(f"Full response structure: {response_data}")
 
             output = response_data.get("output", [])
 
@@ -57,6 +55,10 @@ class GrokClient(ModelClient):
                             all_text.append(block.get("text", ""))
 
             content = "".join(all_text).strip()
+
+            # Remove citation markers like [[1]](url)
+            content = re.sub(r"\[\[\d+\]\]\([^)]+\)", "", content)
+
             logger.info(f"Response length: {len(content)} characters")
 
             return content if content else "I couldn't generate a response."
