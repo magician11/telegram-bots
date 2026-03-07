@@ -1,14 +1,20 @@
-from openai import OpenAI
-from typing import List, Dict, BinaryIO
 import logging
 import os
-from .base import ModelClient
+from typing import BinaryIO, Dict, List
+
+from openai import OpenAI
+
 from telegram_common.audio_utils import AudioFileManager
+
+from .base import ModelClient
 
 logger = logging.getLogger(__name__)
 
+
 class OpenAIClient(ModelClient):
-    def __init__(self, api_key: str, model_name: str = "gpt-5.2", enable_speech: bool = False):
+    def __init__(
+        self, api_key: str, model_name: str = "gpt-5.4", enable_speech: bool = False
+    ):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model_name
 
@@ -19,8 +25,7 @@ class OpenAIClient(ModelClient):
             logger.info(f"OpenAI API call with model: {self.model_name}")
 
             response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=history
+                model=self.model_name, messages=history
             )
 
             content = response.choices[0].message.content.strip()
@@ -31,7 +36,9 @@ class OpenAIClient(ModelClient):
             logger.error(f"Error generating OpenAI response: {str(e)}")
             return "Sorry, I'm having trouble generating a response right now."
 
-    async def transcribe_audio(self, audio_file: BinaryIO, filename: str = "audio.ogg") -> str:
+    async def transcribe_audio(
+        self, audio_file: BinaryIO, filename: str = "audio.ogg"
+    ) -> str:
         """Transcribe audio using OpenAI GPT-4o-mini-transcribe."""
         if not self.enable_speech:
             raise ValueError("Speech functionality not enabled for this client")
@@ -45,16 +52,21 @@ class OpenAIClient(ModelClient):
             audio_file.seek(0)
 
             # If it's AAC, convert to supported format
-            if filename.lower().endswith('.aac'):
+            if filename.lower().endswith(".aac"):
                 logger.info(f"AAC detected - converting to supported format")
-                temp_file = AudioFileManager.bytes_to_file(audio_file.read(), suffix=".aac")
-                converted_path = AudioFileManager.convert_to_supported_format(temp_file.name)
-                audio_file = open(converted_path, 'rb')  # Reopen as BinaryIO
-                filename = os.path.basename(converted_path)  # Update filename for OpenAI
+                temp_file = AudioFileManager.bytes_to_file(
+                    audio_file.read(), suffix=".aac"
+                )
+                converted_path = AudioFileManager.convert_to_supported_format(
+                    temp_file.name
+                )
+                audio_file = open(converted_path, "rb")  # Reopen as BinaryIO
+                filename = os.path.basename(
+                    converted_path
+                )  # Update filename for OpenAI
 
             transcript = self.client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=(filename, audio_file)
+                model="gpt-4o-mini-transcribe", file=(filename, audio_file)
             )
 
             text = transcript.text.strip()
@@ -83,7 +95,7 @@ class OpenAIClient(ModelClient):
                 model="gpt-4o-mini-tts",
                 voice=voice,
                 input=text,
-                response_format="opus"  # OGG Opus format for Telegram
+                response_format="opus",  # OGG Opus format for Telegram
             )
 
             audio_content = response.content
