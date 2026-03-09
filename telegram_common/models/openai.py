@@ -34,7 +34,11 @@ class OpenAIClient(ModelClient):
             return content
         except Exception as e:
             logger.error(f"Error generating OpenAI response: {str(e)}")
-            return "Sorry, I'm having trouble generating a response right now."
+            try:
+                error_msg = e.body["error"]["message"]  # type: ignore [attr-defined]
+            except (AttributeError, KeyError, TypeError):
+                error_msg = "An unknown error occurred."
+            return f"Sorry, I'm having trouble generating a response right now. {error_msg}"
 
     async def transcribe_audio(
         self, audio_file: BinaryIO, filename: str = "audio.ogg"
@@ -53,7 +57,7 @@ class OpenAIClient(ModelClient):
 
             # If it's AAC, convert to supported format
             if filename.lower().endswith(".aac"):
-                logger.info(f"AAC detected - converting to supported format")
+                logger.info("AAC detected - converting to supported format")
                 temp_file = AudioFileManager.bytes_to_file(
                     audio_file.read(), suffix=".aac"
                 )
@@ -75,7 +79,11 @@ class OpenAIClient(ModelClient):
 
         except Exception as e:
             logger.error(f"Error transcribing audio: {str(e)}")
-            return "Sorry, I couldn't transcribe that audio. Please try again."
+            try:
+                error_msg = e.body["error"]["message"]
+            except (AttributeError, KeyError, TypeError):
+                error_msg = "An unknown error occurred."
+            return f"Sorry, I couldn't transcribe that audio. {error_msg} Please try again."
         finally:
             # Cleanup temp files
             if temp_file:
