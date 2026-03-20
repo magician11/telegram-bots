@@ -13,7 +13,7 @@ class GrokClient(ModelClient):
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.x.ai/v1"
-        self.model_name = "grok-4-1-fast"
+        self.model_name = "grok-4.20"
 
     def supports_vision(self) -> bool:
         return True
