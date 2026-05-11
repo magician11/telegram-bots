@@ -179,7 +179,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Opening message sent and recorded for user {user_id}: {opening_message}"
         )
 
-    conversations[user_id] = user_data
+    await conversations.put.aio(user_id, user_data)
 
 
 def markdown_to_telegram_html(text):
@@ -358,12 +358,13 @@ async def process_user_message(
         bot_config = context.bot_data.get("bot_config")
 
         # Initialize user data if needed
-        if user_id not in conversations:
-            conversations[user_id] = init_user_data(
-                context.bot_data["system_prompt"], bot_config
+        if not await conversations.contains.aio(user_id):
+            await conversations.put.aio(
+                user_id,
+                init_user_data(context.bot_data["system_prompt"], bot_config),
             )
 
-        user_data = conversations[user_id]
+        user_data = await conversations.get.aio(user_id)
 
         # Check usage limits
         if not await check_user_access(user_data, update, bot_config):
@@ -409,7 +410,7 @@ async def process_user_message(
 
         # Save updated conversation
         user_data["history"] = history
-        conversations[user_id] = user_data
+        await conversations.put.aio(user_id, user_data)
 
         logger.info(f"Sending response to user {user_id}")
         await send_long_message(update, context, html_response, parse_mode="HTML")
@@ -502,23 +503,24 @@ async def webhook_handler(request: Request, token: str, application, processed_u
 
         # Clean up old entries
         expired_keys = []
-        for key, value in list(processed_updates.items()):
+        items = await processed_updates.items.aio()
+        for key, value in list(items):
             if isinstance(value, dict) and "timestamp" in value:
                 if current_time - value["timestamp"] > PROCESSED_UPDATES_EXPIRY:
                     expired_keys.append(key)
             elif isinstance(value, bool) and value is True:
-                processed_updates[key] = {"timestamp": current_time}
+                await processed_updates.put.aio(key, {"timestamp": current_time})
 
         for key in expired_keys:
             logger.info(f"Removing expired update record: {key}")
-            del processed_updates[key]
+            await processed_updates.pop.aio(key)
 
         # Get update ID
         update_id = str(update_data.get("update_id"))
 
         # Check if this update is already being processed or has been processed
-        if update_id in processed_updates:
-            value = processed_updates[update_id]
+        if await processed_updates.contains.aio(update_id):
+            value = await processed_updates.get.aio(update_id)
 
             # Check if it's in "processing" state (temporary state before completion)
             if isinstance(value, dict) and value.get("status") == "processing":
@@ -532,10 +534,13 @@ async def webhook_handler(request: Request, token: str, application, processed_u
                 return {"ok": True, "info": "Update already processed"}
 
         # Mark as "being processed" immediately
-        processed_updates[update_id] = {
-            "timestamp": current_time,
-            "status": "processing",
-        }
+        await processed_updates.put.aio(
+            update_id,
+            {
+                "timestamp": current_time,
+                "status": "processing",
+            },
+        )
         logger.info(f"Started processing update {update_id}")
 
         # Process the update
@@ -543,21 +548,27 @@ async def webhook_handler(request: Request, token: str, application, processed_u
         await application.process_update(update)
 
         # Mark as completed
-        processed_updates[update_id] = {
-            "timestamp": current_time,
-            "status": "completed",
-        }
+        await processed_updates.put.aio(
+            update_id,
+            {
+                "timestamp": current_time,
+                "status": "completed",
+            },
+        )
         logger.info(f"Successfully processed update {update_id}")
 
         return {"ok": True}
     except Exception as e:
         # In case of error, still mark the update as processed to prevent retries
         if "update_id" in locals():
-            processed_updates[update_id] = {
-                "timestamp": current_time,
-                "status": "error",
-                "error": str(e),
-            }
+            await processed_updates.put.aio(
+                update_id,
+                {
+                    "timestamp": current_time,
+                    "status": "error",
+                    "error": str(e),
+                },
+            )
             logger.error(f"Error processing update {update_id}: {str(e)}")
         else:
             logger.error(f"Error processing webhook: {str(e)}")
@@ -573,8 +584,8 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_name = context.bot_data.get("bot_name", "Assistant")
 
     # Reset the conversation but PRESERVE usage tracking
-    if user_id in conversations:
-        user_data = conversations[user_id]
+    if await conversations.contains.aio(user_id):
+        user_data = await conversations.get.aio(user_id)
 
         # Only reset the conversation history, keep daily_usage and is_premium
         system_prompt = context.bot_data["system_prompt"]
@@ -584,7 +595,7 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_data["history"] = []  # Empty history for speech-only bots
 
         reset_daily_usage_if_new_day(user_data)
-        conversations[user_id] = user_data  # Force Modal Dict save
+        await conversations.put.aio(user_id, user_data)
 
         # Create appropriate response message
         if speech_only:
@@ -608,8 +619,9 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     else:
         # New user - initialize normally
-        conversations[user_id] = init_user_data(
-            context.bot_data["system_prompt"], bot_config
+        await conversations.put.aio(
+            user_id,
+            init_user_data(context.bot_data["system_prompt"], bot_config),
         )
         if speech_only:
             response_msg = f"🎙️ {bot_name} ready for speech conversion! Send text or voice messages."
