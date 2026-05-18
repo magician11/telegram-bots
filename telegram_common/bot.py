@@ -503,8 +503,8 @@ async def webhook_handler(request: Request, token: str, application, processed_u
 
         # Clean up old entries
         expired_keys = []
-        items = await processed_updates.items.aio()
-        for key, value in list(items):
+        # items.aio() returns an async generator, must use async for
+        async for key, value in processed_updates.items.aio():
             if isinstance(value, dict) and "timestamp" in value:
                 if current_time - value["timestamp"] > PROCESSED_UPDATES_EXPIRY:
                     expired_keys.append(key)
