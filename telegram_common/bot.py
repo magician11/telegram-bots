@@ -691,6 +691,71 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     await process_audio(update, context, audio_obj)
 
 
+async def handle_voice_to_conversation(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
+    """Hybrid mode: transcribe voice/audio, then feed into AI conversation."""
+    user_id = str(update.effective_user.id)
+
+    # Determine the audio object from voice, audio, or document
+    audio_obj = update.message.voice or update.message.audio
+    if not audio_obj and update.message.document:
+        doc = update.message.document
+        if doc.mime_type and doc.mime_type.startswith("audio/"):
+            audio_obj = doc
+
+    if not audio_obj:
+        return  # Not an audio message we can handle
+
+    logger.info(
+        f"Hybrid voice from {user_id}: {getattr(audio_obj, 'file_name', 'voice')}, "
+        f"{audio_obj.file_size} bytes"
+    )
+
+    if not validate_audio_size(audio_obj.file_size):
+        await update.message.reply_text(
+            f"Audio too large ({format_file_size(audio_obj.file_size)}). Max 20MB."
+        )
+        return
+
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id, action="typing"
+    )
+
+    model_client = context.bot_data["model_client"]
+    if not hasattr(model_client, "transcribe_audio"):
+        await update.message.reply_text(
+            "Audio transcription is not available for this bot."
+        )
+        return
+
+    extension = os.path.splitext(getattr(audio_obj, "file_name", "") or "")[1] or ".ogg"
+    temp_file = AudioFileManager.create_temp_file(extension)
+
+    try:
+        file = await context.bot.get_file(audio_obj.file_id)
+        await file.download_to_drive(temp_file.name)
+
+        with open(temp_file.name, "rb") as f:
+            transcription = await model_client.transcribe_audio(
+                f, getattr(audio_obj, "file_name", "voice.ogg")
+            )
+
+        if not transcription or not transcription.strip():
+            await update.message.reply_text(
+                "I couldn't understand the audio. Please try again."
+            )
+            return
+
+        logger.info(f"Voice transcription from {user_id}: {transcription}")
+
+        # Feed the transcription directly into the conversation
+        await process_user_message(update, context, transcription, "voice")
+
+    finally:
+        AudioFileManager.cleanup_temp_file(temp_file.name)
+
+
 async def handle_text_to_speech(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for text messages - convert ALL text to speech."""
     try:
@@ -813,12 +878,35 @@ async def initialize_bot(
             MessageHandler(filters.Document.ALL & ~filters.COMMAND, handle_document)
         )
     else:
-        # Regular chat bot: ONLY text and images conversation, no speech features
+        # Regular chat bot: text and images conversation
         logger.info("Initializing regular chat bot handlers")
         application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
         )
         application.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
+
+        # If model supports transcription, add hybrid voice-to-conversation handlers
+        if hasattr(model_client, "transcribe_audio"):
+            logger.info("Hybrid mode: adding voice-to-conversation handlers")
+            application.add_handler(
+                MessageHandler(filters.VOICE, handle_voice_to_conversation)
+            )
+            application.add_handler(
+                MessageHandler(filters.AUDIO, handle_voice_to_conversation)
+            )
+
+            async def handle_audio_document(
+                update: Update, context: ContextTypes.DEFAULT_TYPE
+            ):
+                doc = update.message.document
+                if doc and doc.mime_type and doc.mime_type.startswith("audio/"):
+                    await handle_voice_to_conversation(update, context)
+
+            application.add_handler(
+                MessageHandler(
+                    filters.Document.ALL & ~filters.COMMAND, handle_audio_document
+                )
+            )
 
     await application.initialize()
     return application
