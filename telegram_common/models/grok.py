@@ -94,14 +94,17 @@ class GrokClient(ModelClient):
                 "messages": history,
             }
 
+            # xAI-specific params must go via extra_body (OpenAI SDK rejects unknown kwargs)
+            extra_body: dict = {}
             if self.search_mode != "off":
-                kwargs["search_parameters"] = {
+                extra_body["search_parameters"] = {
                     "mode": self.search_mode,
                     "return_citations": True,
                 }
-
             if self.reasoning_effort != "none":
-                kwargs["reasoning_effort"] = self.reasoning_effort
+                extra_body["reasoning_effort"] = self.reasoning_effort
+            if extra_body:
+                kwargs["extra_body"] = extra_body
 
             response = self.client.chat.completions.create(**kwargs)
 
