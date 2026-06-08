@@ -91,55 +91,57 @@ class GrokClient(ModelClient):
 
             kwargs: dict = {
                 "model": self.model_name,
-                "messages": history,
+                "input": history,
             }
 
-            # xAI-specific params must go via extra_body (OpenAI SDK rejects unknown kwargs)
-            extra_body: dict = {}
+            # Web search via the Agent Tools API (search_parameters is deprecated)
             if self.search_mode != "off":
-                extra_body["search_parameters"] = {
-                    "mode": self.search_mode,
-                    "return_citations": True,
-                }
+                kwargs["tools"] = [{"type": "web_search"}]
+                kwargs["tool_choice"] = "auto"
+
+            # Reasoning effort
             if self.reasoning_effort != "none":
-                extra_body["reasoning_effort"] = self.reasoning_effort
-            if extra_body:
-                kwargs["extra_body"] = extra_body
+                kwargs["reasoning"] = {"effort": self.reasoning_effort}
 
-            response = self.client.chat.completions.create(**kwargs)
+            response = self.client.responses.create(**kwargs)
 
-            choice = response.choices[0]
-            finish_reason = choice.finish_reason
-            content = choice.message.content
+            # Extract text from Responses API output format
+            text = ""
+            for item in response.output:
+                if getattr(item, "type", None) == "message":
+                    for block in getattr(item, "content", []):
+                        if getattr(block, "type", None) == "output_text":
+                            text = getattr(block, "text", "")
+                            break
+                    if text:
+                        break
 
-            # Extract search and reasoning usage from response
+            # Extract usage metrics
             usage = getattr(response, "usage", None)
             num_sources = usage.num_sources_used if usage else 0
             reasoning_tokens = 0
-            if usage and hasattr(usage, "completion_tokens_details"):
-                reasoning_tokens = getattr(
-                    usage.completion_tokens_details, "reasoning_tokens", 0
-                )
-
-            # Log citations if the model searched the web
-            citations = getattr(response, "citations", None)
-            if citations:
-                urls = [c.url if hasattr(c, "url") else str(c) for c in citations]
-                logger.info(f"Grok citations ({len(citations)} sources): {urls}")
+            web_search_calls = 0
+            if usage:
+                if hasattr(usage, "output_tokens_details"):
+                    reasoning_tokens = getattr(
+                        usage.output_tokens_details, "reasoning_tokens", 0
+                    )
+                if hasattr(usage, "server_side_tool_usage_details"):
+                    web_search_calls = getattr(
+                        usage.server_side_tool_usage_details, "web_search_calls", 0
+                    )
 
             logger.info(
-                f"Grok response: finish_reason={finish_reason}, "
-                f"content_length={len(content) if content else 0} chars, "
-                f"sources_used={num_sources}, reasoning_tokens={reasoning_tokens}"
+                f"Grok response: content_length={len(text)} chars, "
+                f"sources_used={num_sources}, web_search_calls={web_search_calls}, "
+                f"reasoning_tokens={reasoning_tokens}"
             )
 
-            if content is None:
-                logger.error(
-                    f"Grok returned None content. finish_reason={finish_reason}."
-                )
+            if not text:
+                logger.error(f"Grok returned empty text. status={response.status}")
                 return ""
 
-            return content.strip()
+            return text.strip()
 
         except Exception as e:
             logger.error(
