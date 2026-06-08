@@ -25,13 +25,21 @@ MIME_TYPES = {
 
 
 class GrokClient(ModelClient):
-    def __init__(self, api_key: str):
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str = "grok-4.3",
+        search_mode: str = "auto",
+        reasoning_effort: str = "medium",
+    ):
         self.api_key = api_key
         self.client = OpenAI(
             api_key=api_key,
             base_url="https://api.x.ai/v1",
         )
-        self.model_name = "grok-latest"
+        self.model_name = model_name
+        self.search_mode = search_mode  # "off", "on", or "auto"
+        self.reasoning_effort = reasoning_effort  # "none", "low", "medium", "high"
 
     def supports_vision(self) -> bool:
         return True
@@ -77,21 +85,49 @@ class GrokClient(ModelClient):
     async def generate_response(self, history: List[Dict]) -> str:
         try:
             logger.info(
-                f"Grok API call: model={self.model_name}, messages={len(history)}"
+                f"Grok API call: model={self.model_name}, messages={len(history)}, "
+                f"search={self.search_mode}, reasoning={self.reasoning_effort}"
             )
 
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=history,
-            )
+            kwargs: dict = {
+                "model": self.model_name,
+                "messages": history,
+            }
+
+            if self.search_mode != "off":
+                kwargs["search_parameters"] = {
+                    "mode": self.search_mode,
+                    "return_citations": True,
+                }
+
+            if self.reasoning_effort != "none":
+                kwargs["reasoning_effort"] = self.reasoning_effort
+
+            response = self.client.chat.completions.create(**kwargs)
 
             choice = response.choices[0]
             finish_reason = choice.finish_reason
             content = choice.message.content
 
+            # Extract search and reasoning usage from response
+            usage = getattr(response, "usage", None)
+            num_sources = usage.num_sources_used if usage else 0
+            reasoning_tokens = 0
+            if usage and hasattr(usage, "completion_tokens_details"):
+                reasoning_tokens = getattr(
+                    usage.completion_tokens_details, "reasoning_tokens", 0
+                )
+
+            # Log citations if the model searched the web
+            citations = getattr(response, "citations", None)
+            if citations:
+                urls = [c.url if hasattr(c, "url") else str(c) for c in citations]
+                logger.info(f"Grok citations ({len(citations)} sources): {urls}")
+
             logger.info(
                 f"Grok response: finish_reason={finish_reason}, "
-                f"content_length={len(content) if content else 0} chars"
+                f"content_length={len(content) if content else 0} chars, "
+                f"sources_used={num_sources}, reasoning_tokens={reasoning_tokens}"
             )
 
             if content is None:
