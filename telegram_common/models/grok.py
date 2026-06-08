@@ -110,20 +110,16 @@ class GrokClient(ModelClient):
                     if text:
                         break
 
-            # Extract usage metrics
-            usage = getattr(response, "usage", None)
-            num_sources = usage.num_sources_used if usage else 0
-            reasoning_tokens = 0
-            web_search_calls = 0
-            if usage:
-                if hasattr(usage, "output_tokens_details"):
-                    reasoning_tokens = getattr(
-                        usage.output_tokens_details, "reasoning_tokens", 0
-                    )
-                if hasattr(usage, "server_side_tool_usage_details"):
-                    web_search_calls = getattr(
-                        usage.server_side_tool_usage_details, "web_search_calls", 0
-                    )
+            # Extract usage metrics from raw dict (SDK doesn't map xAI extras)
+            raw = response.model_dump()
+            usage = raw.get("usage", {})
+            num_sources = usage.get("num_sources_used", 0)
+            reasoning_tokens = usage.get("output_tokens_details", {}).get(
+                "reasoning_tokens", 0
+            )
+            web_search_calls = usage.get("server_side_tool_usage_details", {}).get(
+                "web_search_calls", 0
+            )
 
             logger.info(
                 f"Grok response: content_length={len(text)} chars, "
