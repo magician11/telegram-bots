@@ -29,7 +29,6 @@ class GrokClient(ModelClient):
         self,
         api_key: str,
         model_name: str = "grok-4.3",
-        search_mode: str = "auto",
         reasoning_effort: str = "medium",
     ):
         self.api_key = api_key
@@ -38,7 +37,6 @@ class GrokClient(ModelClient):
             base_url="https://api.x.ai/v1",
         )
         self.model_name = model_name
-        self.search_mode = search_mode  # "off", "on", or "auto"
         self.reasoning_effort = reasoning_effort  # "none", "low", "medium", "high"
 
     def supports_vision(self) -> bool:
@@ -86,20 +84,16 @@ class GrokClient(ModelClient):
         try:
             logger.info(
                 f"Grok API call: model={self.model_name}, messages={len(history)}, "
-                f"search={self.search_mode}, reasoning={self.reasoning_effort}"
+                f"reasoning={self.reasoning_effort}"
             )
 
             kwargs: dict = {
                 "model": self.model_name,
                 "input": history,
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "auto",
             }
 
-            # Web search via the Agent Tools API (search_parameters is deprecated)
-            if self.search_mode != "off":
-                kwargs["tools"] = [{"type": "web_search"}]
-                kwargs["tool_choice"] = "auto"
-
-            # Reasoning effort
             if self.reasoning_effort != "none":
                 kwargs["reasoning"] = {"effort": self.reasoning_effort}
 
