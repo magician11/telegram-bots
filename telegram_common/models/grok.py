@@ -80,12 +80,44 @@ class GrokClient(ModelClient):
             logger.error(f"Grok STT error: {type(e).__name__}: {str(e)}")
             return "Sorry, I couldn't transcribe that audio. Please try again."
 
+    def _convert_to_responses_format(self, history: List[Dict]) -> List[Dict]:
+        """Convert Chat Completions content format to Responses API format.
+
+        Chat Completions uses "text" and "image_url" types, while the
+        Responses API uses "input_text" and "input_image" types.
+        The image_url value is also unwrapped from {"url": "..."} to a plain string.
+        """
+        converted = []
+        for msg in history:
+            msg = dict(msg)
+            content = msg.get("content")
+            if isinstance(content, list):
+                new_content = []
+                for part in content:
+                    part = dict(part)
+                    part_type = part.get("type")
+                    if part_type == "text":
+                        part["type"] = "input_text"
+                    elif part_type == "image_url":
+                        part["type"] = "input_image"
+                        # Unwrap image_url from {"url": "..."} to plain string
+                        image_url = part.get("image_url")
+                        if isinstance(image_url, dict):
+                            part["image_url"] = image_url.get("url", "")
+                    new_content.append(part)
+                msg["content"] = new_content
+            converted.append(msg)
+        return converted
+
     async def generate_response(self, history: List[Dict]) -> str:
         try:
             logger.info(
                 f"Grok API call: model={self.model_name}, messages={len(history)}, "
                 f"reasoning={self.reasoning_effort}"
             )
+
+            # Convert Chat Completions format to Responses API format for multimodal content
+            history = self._convert_to_responses_format(history)
 
             kwargs: dict = {
                 "model": self.model_name,
