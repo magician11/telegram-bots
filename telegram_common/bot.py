@@ -824,7 +824,15 @@ async def initialize_bot(
     speech_only: bool = False,
     bot_name: str = "Assistant",
 ):
-    application = Application.builder().token(token).build()
+    application = (
+        Application.builder()
+        .token(token)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .build()
+    )
     application.bot_data["model_client"] = model_client
     application.bot_data["bot_name"] = bot_name
 
