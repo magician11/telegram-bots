@@ -10,6 +10,7 @@ from .base import ModelClient
 logger = logging.getLogger(__name__)
 
 GROK_STT_URL = "https://api.x.ai/v1/stt"
+GROK_TTS_URL = "https://api.x.ai/v1/tts"
 
 MIME_TYPES = {
     ".wav": "audio/wav",
@@ -30,6 +31,7 @@ class GrokClient(ModelClient):
         api_key: str,
         model_name: str = "grok-4.3",
         reasoning_effort: str = "medium",
+        enable_speech: bool = False,
     ):
         self.api_key = api_key
         self.client = OpenAI(
@@ -38,6 +40,8 @@ class GrokClient(ModelClient):
         )
         self.model_name = model_name
         self.reasoning_effort = reasoning_effort  # "none", "low", "medium", "high"
+        self.enable_speech = enable_speech
+        self.speech_format = "mp3"  # xAI TTS returns MP3
 
     def supports_vision(self) -> bool:
         return True
@@ -79,6 +83,49 @@ class GrokClient(ModelClient):
         except Exception as e:
             logger.error(f"Grok STT error: {type(e).__name__}: {str(e)}")
             return "Sorry, I couldn't transcribe that audio. Please try again."
+
+    async def generate_speech(
+        self, text: str, voice: str = "ara", language: str = "en"
+    ) -> bytes:
+        """Generate speech from text using Grok's Text-to-Speech API.
+
+        Uses the xAI TTS endpoint: POST https://api.x.ai/v1/tts.
+        Returns raw audio bytes (MP3 at 24 kHz / 128 kbps by default).
+        """
+        if not self.enable_speech:
+            raise ValueError("Speech functionality not enabled for this client")
+
+        try:
+            logger.info(
+                f"Grok TTS: {len(text)} chars, voice={voice}, language={language}"
+            )
+
+            response = requests.post(
+                GROK_TTS_URL,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": text,
+                    "voice_id": voice,
+                    "language": language,
+                },
+            )
+            response.raise_for_status()
+
+            audio_bytes = response.content
+            logger.info(f"Grok TTS done: {len(audio_bytes)} bytes")
+            return audio_bytes
+
+        except requests.HTTPError as e:
+            logger.error(
+                f"Grok TTS HTTP error: {e.response.status_code} - {e.response.text}"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Grok TTS error: {type(e).__name__}: {str(e)}")
+            raise
 
     def _convert_to_responses_format(self, history: List[Dict]) -> List[Dict]:
         """Convert Chat Completions content format to Responses API format.

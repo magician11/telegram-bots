@@ -55,19 +55,21 @@ class OpenAIClient(ModelClient):
             # Ensure file pointer is at the beginning
             audio_file.seek(0)
 
-            # If it's AAC, convert to supported format
-            if filename.lower().endswith(".aac"):
-                logger.info("AAC detected - converting to supported format")
+            # OpenAI transcription supports: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+            # But some container formats from Telegram (especially m4a/voice notes)
+            # can be rejected. Convert all non-safely-supported formats to MP3.
+            supported_extensions = {".flac", ".mp3", ".mpeg", ".mpga", ".wav"}
+            ext = os.path.splitext(filename.lower())[1]
+            if ext not in supported_extensions:
+                logger.info(f"Format '{ext}' may be unsupported - converting to MP3")
                 temp_file = AudioFileManager.bytes_to_file(
-                    audio_file.read(), suffix=".aac"
+                    audio_file.read(), suffix=ext or ".ogg"
                 )
                 converted_path = AudioFileManager.convert_to_supported_format(
                     temp_file.name
                 )
-                audio_file = open(converted_path, "rb")  # Reopen as BinaryIO
-                filename = os.path.basename(
-                    converted_path
-                )  # Update filename for OpenAI
+                audio_file = open(converted_path, "rb")
+                filename = os.path.basename(converted_path)
 
             transcript = self.client.audio.transcriptions.create(
                 model="gpt-4o-mini-transcribe", file=(filename, audio_file)

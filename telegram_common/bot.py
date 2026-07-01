@@ -796,7 +796,8 @@ async def handle_text_to_speech(update: Update, context: ContextTypes.DEFAULT_TY
 
         # Send as voice message
         audio_file = BytesIO(audio_bytes)
-        audio_file.name = "speech.ogg"
+        ext = getattr(model_client, "speech_format", "ogg")
+        audio_file.name = f"speech.{ext}"
 
         await context.bot.send_voice(
             chat_id=update.effective_chat.id,
