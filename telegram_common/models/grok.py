@@ -29,7 +29,7 @@ class GrokClient(ModelClient):
     def __init__(
         self,
         api_key: str,
-        model_name: str = "grok-4.3",
+        model_name: str = "grok-4.5",
         reasoning_effort: str = "medium",
         enable_speech: bool = False,
     ):
