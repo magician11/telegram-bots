@@ -46,6 +46,7 @@ def init_user_data(system_prompt: str, bot_config: dict = None):
         "history": history,
         "daily_usage": {"count": 0, "date": ""},
         "is_premium": False,
+        "response_mode": "text",
     }
 
 
@@ -400,8 +401,7 @@ async def process_user_message(
             logger.error(f"Error getting response from model: {str(e)}")
             raise
 
-        # Convert markdown to HTML and send
-        html_response = markdown_to_telegram_html(response_text)
+        # Record assistant response in history
         history.append({"role": "assistant", "content": response_text})
 
         # Trim history if needed
@@ -412,8 +412,37 @@ async def process_user_message(
         user_data["history"] = history
         await conversations.put.aio(user_id, user_data)
 
-        logger.info(f"Sending response to user {user_id}")
-        await send_long_message(update, context, html_response, parse_mode="HTML")
+        # Send as voice or text depending on user preference
+        response_mode = user_data.get("response_mode", "text")
+        can_speak = getattr(model_client, "enable_speech", False) and hasattr(
+            model_client, "generate_speech"
+        )
+
+        if response_mode == "voice" and can_speak:
+            logger.info(f"Sending voice response to user {user_id}")
+            await context.bot.send_chat_action(
+                chat_id=update.effective_chat.id, action="record_voice"
+            )
+            try:
+                audio_bytes = await model_client.generate_speech(response_text)
+                audio_file = BytesIO(audio_bytes)
+                ext = getattr(model_client, "speech_format", "ogg")
+                audio_file.name = f"speech.{ext}"
+                await context.bot.send_voice(
+                    chat_id=update.effective_chat.id,
+                    voice=audio_file,
+                )
+                logger.info(f"Voice response sent to user {user_id}: {len(audio_bytes)} bytes")
+            except Exception as e:
+                logger.error(f"Speech generation failed, falling back to text: {e}")
+                await send_long_message(
+                    update, context, response_text, parse_mode="Markdown"
+                )
+        else:
+            html_response = markdown_to_telegram_html(response_text)
+            logger.info(f"Sending text response to user {user_id}")
+            await send_long_message(update, context, html_response, parse_mode="HTML")
+
         logger.info(f"Response sent to user {user_id}")
 
     except Exception as e:
@@ -630,6 +659,37 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Cleared conversation history for user {user_id}")
     await update.message.reply_text(response_msg)
+
+
+async def voice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /voice - switch to voice response mode."""
+    user_id = str(update.effective_user.id)
+    conversations = context.bot_data["conversations"]
+    model_client = context.bot_data["model_client"]
+
+    if not getattr(model_client, "enable_speech", False):
+        await update.message.reply_text("🔇 Voice responses are not available for this bot.")
+        return
+
+    if await conversations.contains.aio(user_id):
+        user_data = await conversations.get.aio(user_id)
+        user_data["response_mode"] = "voice"
+        await conversations.put.aio(user_id, user_data)
+
+    await update.message.reply_text("🔊 I'll respond with voice messages from now on. Use /text to switch back.")
+
+
+async def text_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /text - switch to text response mode."""
+    user_id = str(update.effective_user.id)
+    conversations = context.bot_data["conversations"]
+
+    if await conversations.contains.aio(user_id):
+        user_data = await conversations.get.aio(user_id)
+        user_data["response_mode"] = "text"
+        await conversations.put.aio(user_id, user_data)
+
+    await update.message.reply_text("📝 Switched back to text responses.")
 
 
 async def process_audio(update: Update, context: ContextTypes.DEFAULT_TYPE, audio_obj):
@@ -889,6 +949,12 @@ async def initialize_bot(
     else:
         # Regular chat bot: text and images conversation
         logger.info("Initializing regular chat bot handlers")
+
+        # Add voice/text toggle commands (only if model supports speech)
+        if getattr(model_client, "enable_speech", False):
+            application.add_handler(CommandHandler("voice", voice_command))
+            application.add_handler(CommandHandler("text", text_command))
+
         application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
         )
