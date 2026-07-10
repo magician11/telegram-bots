@@ -350,10 +350,6 @@ async def process_user_message(
         user_id = str(update.effective_user.id)
         logger.info(f"Processing {message_type} message from {user_id}")
 
-        await context.bot.send_chat_action(
-            chat_id=update.effective_chat.id, action="typing"
-        )
-
         # Get conversation data
         conversations = context.bot_data["conversations"]
         bot_config = context.bot_data.get("bot_config")
@@ -366,6 +362,16 @@ async def process_user_message(
             )
 
         user_data = await conversations.get.aio(user_id)
+
+        # Show appropriate chat action based on response mode
+        response_mode = user_data.get("response_mode", "text")
+        can_speak = getattr(
+            context.bot_data["model_client"], "enable_speech", False
+        )
+        action = "record_voice" if (response_mode == "voice" and can_speak) else "typing"
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id, action=action
+        )
 
         # Check usage limits
         if not await check_user_access(user_data, update, bot_config):
@@ -413,16 +419,8 @@ async def process_user_message(
         await conversations.put.aio(user_id, user_data)
 
         # Send as voice or text depending on user preference
-        response_mode = user_data.get("response_mode", "text")
-        can_speak = getattr(model_client, "enable_speech", False) and hasattr(
-            model_client, "generate_speech"
-        )
-
         if response_mode == "voice" and can_speak:
             logger.info(f"Sending voice response to user {user_id}")
-            await context.bot.send_chat_action(
-                chat_id=update.effective_chat.id, action="record_voice"
-            )
             try:
                 audio_bytes = await model_client.generate_speech(response_text)
                 audio_file = BytesIO(audio_bytes)
