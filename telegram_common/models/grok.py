@@ -216,4 +216,4 @@ class GrokClient(ModelClient):
             logger.error(
                 f"Error generating Grok response: {type(e).__name__}: {str(e)}"
             )
-            return "Sorry, I'm having trouble generating a response right now."
+            return "Oops, my circuits are a bit scrambled right now! \U0001f916 Try again in a minute or two."
