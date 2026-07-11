@@ -202,6 +202,12 @@ def markdown_to_telegram_html(text):
     text = re.sub(r"```.*?\n(.*?)```", r"<pre>\1</pre>", text, flags=re.DOTALL)
     text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
 
+    # Step 1.5: Normalize citation links [[N]](url) → [N](url)
+    text = re.sub(r"\[\[(\d+)\]\]", r"[\1]", text)
+
+    # Convert remaining markdown links to HTML
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
+
     # Step 2: Convert bold-italic combinations (processed before individual formats)
     text = re.sub(r"\*\*\*(.*?)\*\*\*", r"<b><i>\1</i></b>", text)
 
@@ -422,7 +428,9 @@ async def process_user_message(
         if response_mode == "voice" and can_speak:
             logger.info(f"Sending voice response to user {user_id}")
             try:
-                audio_bytes = await model_client.generate_speech(response_text)
+                # Strip citation links from TTS text so they don't get read aloud
+                tts_text = re.sub(r"\[\[\d+\]\]\([^)]*\)", "", response_text)
+                audio_bytes = await model_client.generate_speech(tts_text)
                 audio_file = BytesIO(audio_bytes)
                 ext = getattr(model_client, "speech_format", "ogg")
                 audio_file.name = f"speech.{ext}"
@@ -902,7 +910,7 @@ async def initialize_bot(
         if not system_prompt:
             system_prompt = "You are a helpful assistant."
         application.bot_data["system_prompt"] = (
-            f"{system_prompt} Keep responses to a maximum of 11 sentences."
+            f"{system_prompt} You are responding on Telegram. Keep responses to a maximum of 11 sentences."
         )
 
     application.bot_data["conversations"] = conversations
