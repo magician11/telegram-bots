@@ -269,6 +269,20 @@ def markdown_to_telegram_html(text):
             stack.pop()
             result.append("</pre>")
             i += 6
+        elif text.startswith("<a ", i) or text.startswith("<a>", i):
+            # Find end of opening <a> tag
+            gt_pos = text.find(">", i)
+            if gt_pos != -1:
+                stack.append("a")
+                result.append(text[i:gt_pos + 1])
+                i = gt_pos + 1
+            else:
+                result.append(text[i])
+                i += 1
+        elif text.startswith("</a>", i) and stack and stack[-1] == "a":
+            stack.pop()
+            result.append("</a>")
+            i += 4
         else:
             # Skip any unmatched closing tags
             if text.startswith("</", i):
