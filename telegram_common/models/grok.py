@@ -13,49 +13,33 @@ GROK_STT_URL = "https://api.x.ai/v1/stt"
 GROK_TTS_URL = "https://api.x.ai/v1/tts"
 
 SPEECH_TAG_SYSTEM_PROMPT = """\
-You prepare text for a text-to-speech engine by annotating it with speech tags
-and cleaning up anything that would sound awkward when read aloud.
+You prepare text for a text-to-speech engine. Clean up anything that would
+sound awkward when read aloud, then annotate with speech tags for natural,
+expressive delivery. Use your judgement — insert tags where they make the
+speech sound more human.
 
-STEP 1 — Clean up unreadable formatting:
-- Remove or replace bare URLs (e.g. "https://example.com/page" -> "on their website")
-- Handle citation markers like [[1]](https://...): remove them entirely, or if
-they add meaningful context, rephrase naturally (e.g. "as one study found",
-"according to a PubMed paper"). Do NOT read citation numbers or URLs aloud.
-- Remove reference markers like [1], [2], footnote markers, and raw markdown.
-- Remove orphaned symbols, stray punctuation, or formatting artifacts.
-- Do NOT alter the core meaning, facts, or tone of the text.
+Cleanup:
+- Remove bare URLs and citation markers like [[1]](https://...). If a
+  citation adds meaningful context, rephrase it naturally (e.g. "as one
+  study found"). Never read citation numbers or URLs aloud.
+- Remove raw markdown, reference markers, and formatting artifacts.
+- Do not alter the core meaning, facts, or tone.
 
-STEP 2 — Annotate with speech tags. Insert tags sparingly where they add
-natural, expressive delivery.
-
-Available inline tags (place at specific points):
+Available inline tags:
 [pause], [long-pause], [hum-tune], [laugh], [chuckle], [giggle], [cry],
 [tsk], [tongue-click], [lip-smack], [breath], [inhale], [exhale], [sigh]
 
-Available wrapping tags (wrap around text):
+Available wrapping tags:
 <soft>, <whisper>, <loud>, <build-intensity>, <decrease-intensity>,
 <higher-pitch>, <lower-pitch>, <slow>, <fast>, <sing-song>, <singing>,
 <laugh-speak>, <emphasis>
 
-Tag guidelines:
-- [pause] before transition words (but, however, so, well) or dramatic reveals
-- [long-pause] at paragraph breaks, ellipsis, or heavy emotional beats
-- [laugh] / [chuckle] / [giggle] after genuinely funny or amusing lines.
-  IMPORTANT: Remove verbal laughter like "haha", "lol", "hehe" and replace
-  them with the appropriate tag — do NOT keep both.
-- [sigh] for resignation, disappointment, or relief. Remove written sighs.
-- [breath] before very long sentences that need a breath point
-- <whisper> around secrets, asides, parentheticals, conspiratorial remarks
-- <emphasis> for key words or phrases that carry weight, not every sentence
-- <loud> for shouted or intensely energetic phrases
-- <slow> / <soft> for tender, sad, or solemn moments
-- <sing-song> / <singing> for playful, musical, or rhyming lines
-- <laugh-speak> for lines delivered while laughing
-- Use sparingly — over-tagging sounds unnatural and robotic
-- Replace written emotional expressions with tags (e.g. "*sigh*" -> [sigh],
-  "haha" -> [laugh], "*crying*" -> [cry]) rather than keeping both
-- Combine wrapping tags for layered delivery: <slow><soft>goodnight</soft></slow>
-- Return ONLY the cleaned, tagged text — no preamble, no explanation"""
+Important:
+- Replace written emotional expressions with tags (e.g. "haha" -> [laugh],
+  "*sigh*" -> [sigh]) rather than keeping both.
+- Combine wrapping tags for layered delivery:
+  <slow><soft>goodnight</soft></slow>
+- Return ONLY the cleaned, tagged text — no preamble, no explanation."""
 
 MIME_TYPES = {
     ".wav": "audio/wav",
