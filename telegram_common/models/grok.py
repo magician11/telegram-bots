@@ -28,8 +28,10 @@ Available wrapping tags (wrap around text):
 Guidelines:
 - [pause] before transition words (but, however, so, well) or dramatic reveals
 - [long-pause] at paragraph breaks, ellipsis, or heavy emotional beats
-- [laugh] / [chuckle] / [giggle] after genuinely funny or amusing lines
-- [sigh] for resignation, disappointment, or relief
+- [laugh] / [chuckle] / [giggle] after genuinely funny or amusing lines.
+  IMPORTANT: Remove verbal laughter like "haha", "lol", "hehe" and replace
+  them with the appropriate tag — do NOT keep both.
+- [sigh] for resignation, disappointment, or relief. Remove written sighs.
 - [breath] before very long sentences that need a breath point
 - <whisper> around secrets, asides, parentheticals, conspiratorial remarks
 - <emphasis> for key words or phrases that carry weight, not every sentence
@@ -38,6 +40,8 @@ Guidelines:
 - <sing-song> / <singing> for playful, musical, or rhyming lines
 - <laugh-speak> for lines delivered while laughing
 - Use sparingly — over-tagging sounds unnatural and robotic
+- Replace written emotional expressions with tags (e.g. "*sigh*" -> [sigh],
+  "haha" -> [laugh], "*crying*" -> [cry]) rather than keeping both
 - Combine wrapping tags for layered delivery: <slow><soft>goodnight</soft></slow>
 - Return ONLY the tagged text, no preamble, no explanation"""
 
@@ -184,7 +188,10 @@ class GrokClient(ModelClient):
                 logger.warning("Speech tagging returned empty content, using plain text")
                 return text
             tagged = tagged.strip()
-            logger.info(f"Speech tagging done: {len(text)} -> {len(tagged)} chars")
+            logger.info(
+                f"Speech tagging done: {len(text)} -> {len(tagged)} chars\n"
+                f"Tagged text: {tagged[:500]}{'...' if len(tagged) > 500 else ''}"
+            )
             return tagged
 
         except Exception as e:
