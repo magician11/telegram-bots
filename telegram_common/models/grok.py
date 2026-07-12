@@ -12,6 +12,35 @@ logger = logging.getLogger(__name__)
 GROK_STT_URL = "https://api.x.ai/v1/stt"
 GROK_TTS_URL = "https://api.x.ai/v1/tts"
 
+SPEECH_TAG_SYSTEM_PROMPT = """\
+You annotate plain text with speech tags for a TTS engine. Insert tags sparingly
+where they add natural, expressive delivery.
+
+Available inline tags (place at specific points):
+[pause], [long-pause], [hum-tune], [laugh], [chuckle], [giggle], [cry],
+[tsk], [tongue-click], [lip-smack], [breath], [inhale], [exhale], [sigh]
+
+Available wrapping tags (wrap around text):
+<soft>, <whisper>, <loud>, <build-intensity>, <decrease-intensity>,
+<higher-pitch>, <lower-pitch>, <slow>, <fast>, <sing-song>, <singing>,
+<laugh-speak>, <emphasis>
+
+Guidelines:
+- [pause] before transition words (but, however, so, well) or dramatic reveals
+- [long-pause] at paragraph breaks, ellipsis, or heavy emotional beats
+- [laugh] / [chuckle] / [giggle] after genuinely funny or amusing lines
+- [sigh] for resignation, disappointment, or relief
+- [breath] before very long sentences that need a breath point
+- <whisper> around secrets, asides, parentheticals, conspiratorial remarks
+- <emphasis> for key words or phrases that carry weight, not every sentence
+- <loud> for shouted or intensely energetic phrases
+- <slow> / <soft> for tender, sad, or solemn moments
+- <sing-song> / <singing> for playful, musical, or rhyming lines
+- <laugh-speak> for lines delivered while laughing
+- Use sparingly — over-tagging sounds unnatural and robotic
+- Combine wrapping tags for layered delivery: <slow><soft>goodnight</soft></slow>
+- Return ONLY the tagged text, no preamble, no explanation"""
+
 MIME_TYPES = {
     ".wav": "audio/wav",
     ".mp3": "audio/mpeg",
@@ -90,14 +119,18 @@ class GrokClient(ModelClient):
         """Generate speech from text using Grok's Text-to-Speech API.
 
         Uses the xAI TTS endpoint: POST https://api.x.ai/v1/tts.
+        Automatically annotates text with expressive speech tags before synthesis.
         Returns raw audio bytes (MP3 at 24 kHz / 128 kbps by default).
         """
         if not self.enable_speech:
             raise ValueError("Speech functionality not enabled for this client")
 
         try:
+            # Annotate plain text with speech tags for expressive delivery
+            tagged_text = await self._tag_for_speech(text)
+
             logger.info(
-                f"Grok TTS: {len(text)} chars, voice={voice}, language={language}"
+                f"Grok TTS: {len(tagged_text)} chars, voice={voice}, language={language}"
             )
 
             response = requests.post(
@@ -107,7 +140,7 @@ class GrokClient(ModelClient):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "text": text,
+                    "text": tagged_text,
                     "voice_id": voice,
                     "language": language,
                 },
@@ -126,6 +159,40 @@ class GrokClient(ModelClient):
         except Exception as e:
             logger.error(f"Grok TTS error: {type(e).__name__}: {str(e)}")
             raise
+
+    async def _tag_for_speech(self, text: str) -> str:
+        """Annotate plain text with expressive speech tags using the LLM.
+
+        Sends the text to Grok with a system prompt describing all available
+        speech tags and when to use them. Falls back to plain text if the
+        tagging call fails.
+        """
+        try:
+            logger.info(f"Speech tagging: annotating {len(text)} chars")
+
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": SPEECH_TAG_SYSTEM_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+                temperature=0.3,
+            )
+
+            tagged = response.choices[0].message.content
+            if not tagged:
+                logger.warning("Speech tagging returned empty content, using plain text")
+                return text
+            tagged = tagged.strip()
+            logger.info(f"Speech tagging done: {len(text)} -> {len(tagged)} chars")
+            return tagged
+
+        except Exception as e:
+            logger.warning(
+                f"Speech tagging failed, falling back to plain text: "
+                f"{type(e).__name__}: {str(e)}"
+            )
+            return text
 
     def _convert_to_responses_format(self, history: List[Dict]) -> List[Dict]:
         """Convert Chat Completions content format to Responses API format.
