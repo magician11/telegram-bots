@@ -442,9 +442,7 @@ async def process_user_message(
         if response_mode == "voice" and can_speak:
             logger.info(f"Sending voice response to user {user_id}")
             try:
-                # Strip citation links from TTS text so they don't get read aloud
-                tts_text = re.sub(r"\[\[\d+\]\]\([^)]*\)", "", response_text)
-                audio_bytes = await model_client.generate_speech(tts_text)
+                audio_bytes = await model_client.generate_speech(response_text)
                 audio_file = BytesIO(audio_bytes)
                 ext = getattr(model_client, "speech_format", "ogg")
                 audio_file.name = f"speech.{ext}"

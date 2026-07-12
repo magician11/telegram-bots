@@ -13,8 +13,22 @@ GROK_STT_URL = "https://api.x.ai/v1/stt"
 GROK_TTS_URL = "https://api.x.ai/v1/tts"
 
 SPEECH_TAG_SYSTEM_PROMPT = """\
-You annotate plain text with speech tags for a TTS engine. Insert tags sparingly
-where they add natural, expressive delivery.
+You prepare text for a text-to-speech engine by annotating it with speech tags
+and cleaning up anything that would sound awkward when read aloud.
+
+STEP 1 — Clean up unreadable formatting:
+- Remove or replace bare URLs (e.g. "https://example.com/page" -> "on their website")
+- Handle citation markers like [[1]](https://...): remove them entirely, or if
+they add meaningful context, rephrase naturally (e.g. "as one study found",
+"according to a PubMed paper"). Do NOT read citation numbers or URLs aloud.
+- Remove reference markers like [1], [2], footnote markers, and raw markdown.
+- Rewrite technical notation that would read awkwardly (e.g. "5-HT2A" ->
+"five H T two A" if spoken, or leave recognizable abbreviations intact).
+- Remove orphaned symbols, stray punctuation, or formatting artifacts.
+- Do NOT alter the core meaning, facts, or tone of the text.
+
+STEP 2 — Annotate with speech tags. Insert tags sparingly where they add
+natural, expressive delivery.
 
 Available inline tags (place at specific points):
 [pause], [long-pause], [hum-tune], [laugh], [chuckle], [giggle], [cry],
@@ -25,7 +39,7 @@ Available wrapping tags (wrap around text):
 <higher-pitch>, <lower-pitch>, <slow>, <fast>, <sing-song>, <singing>,
 <laugh-speak>, <emphasis>
 
-Guidelines:
+Tag guidelines:
 - [pause] before transition words (but, however, so, well) or dramatic reveals
 - [long-pause] at paragraph breaks, ellipsis, or heavy emotional beats
 - [laugh] / [chuckle] / [giggle] after genuinely funny or amusing lines.
@@ -43,7 +57,7 @@ Guidelines:
 - Replace written emotional expressions with tags (e.g. "*sigh*" -> [sigh],
   "haha" -> [laugh], "*crying*" -> [cry]) rather than keeping both
 - Combine wrapping tags for layered delivery: <slow><soft>goodnight</soft></slow>
-- Return ONLY the tagged text, no preamble, no explanation"""
+- Return ONLY the cleaned, tagged text — no preamble, no explanation"""
 
 MIME_TYPES = {
     ".wav": "audio/wav",
