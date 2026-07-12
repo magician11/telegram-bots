@@ -22,8 +22,6 @@ STEP 1 — Clean up unreadable formatting:
 they add meaningful context, rephrase naturally (e.g. "as one study found",
 "according to a PubMed paper"). Do NOT read citation numbers or URLs aloud.
 - Remove reference markers like [1], [2], footnote markers, and raw markdown.
-- Rewrite technical notation that would read awkwardly (e.g. "5-HT2A" ->
-"five H T two A" if spoken, or leave recognizable abbreviations intact).
 - Remove orphaned symbols, stray punctuation, or formatting artifacts.
 - Do NOT alter the core meaning, facts, or tone of the text.
 
