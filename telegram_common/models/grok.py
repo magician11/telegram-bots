@@ -167,31 +167,39 @@ class GrokClient(ModelClient):
     async def _tag_for_speech(self, text: str) -> str:
         """Annotate plain text with expressive speech tags using the LLM.
 
-        Sends the text to Grok with a system prompt describing all available
-        speech tags and when to use them. Falls back to plain text if the
-        tagging call fails.
+        Uses the Responses API (same as generate_response) to annotate text
+        with speech tags. Falls back to plain text if the tagging call fails.
         """
         try:
             logger.info(f"Speech tagging: annotating {len(text)} chars")
 
-            response = self.client.chat.completions.create(
+            response = self.client.responses.create(
                 model=self.model_name,
-                messages=[
+                input=[
                     {"role": "system", "content": SPEECH_TAG_SYSTEM_PROMPT},
                     {"role": "user", "content": text},
                 ],
                 temperature=0.3,
             )
 
-            tagged = response.choices[0].message.content
+            tagged = ""
+            for item in response.output:
+                if getattr(item, "type", None) == "message":
+                    for block in getattr(item, "content", []):
+                        if getattr(block, "type", None) == "output_text":
+                            tagged = getattr(block, "text", "")
+                            break
+                    if tagged:
+                        break
+
             if not tagged:
                 logger.warning("Speech tagging returned empty content, using plain text")
                 return text
+
             tagged = tagged.strip()
-            logger.info(
-                f"Speech tagging done: {len(text)} -> {len(tagged)} chars\n"
-                f"Tagged text: {tagged[:500]}{'...' if len(tagged) > 500 else ''}"
-            )
+            logger.info(f"Speech tagging done: {len(text)} -> {len(tagged)} chars")
+            logger.info(f"Original text: {text}")
+            logger.info(f"Tagged text:  {tagged}")
             return tagged
 
         except Exception as e:
