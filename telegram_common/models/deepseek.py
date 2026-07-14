@@ -3,6 +3,7 @@ import os
 from typing import BinaryIO, Dict, List
 
 import requests
+from duckduckgo_search import DDGS
 from openai import OpenAI
 
 from .base import ModelClient
@@ -14,6 +15,8 @@ from .speech_tags import (
 )
 
 logger = logging.getLogger(__name__)
+
+SEARCH_RESULT_LIMIT = 5
 
 
 class DeepSeekClient(ModelClient):
@@ -53,6 +56,41 @@ class DeepSeekClient(ModelClient):
 
     # ── chat / reasoning / search ──────────────────────────────────────────
 
+    def _search_web(self, query: str) -> str:
+        """Search the web via DuckDuckGo and return formatted results.
+
+        Returns an empty string if search fails or returns nothing.
+        """
+        try:
+            logger.info(f"DDGS search: query='{query[:100]}'")
+            results = list(DDGS().text(query, max_results=SEARCH_RESULT_LIMIT))
+
+            if not results:
+                logger.info("DDGS search returned no results")
+                return ""
+
+            formatted = []
+            for i, r in enumerate(results, 1):
+                formatted.append(
+                    f"{i}. {r['title']}\n"
+                    f"   {r['href']}\n"
+                    f"   {r['body']}"
+                )
+
+            context = "\n\n".join(formatted)
+            logger.info(
+                f"DDGS search done: {len(results)} results, "
+                f"{len(context)} chars"
+            )
+            return context
+
+        except Exception as e:
+            logger.warning(
+                f"DDGS search failed, proceeding without results: "
+                f"{type(e).__name__}: {str(e)}"
+            )
+            return ""
+
     async def generate_response(self, history: List[Dict]) -> str:
         try:
             total_chars = sum(
@@ -61,14 +99,52 @@ class DeepSeekClient(ModelClient):
                 else 0
                 for msg in history
             )
+
+            # Build the messages list, injecting search context if enabled
+            messages = list(history)  # shallow copy — don't mutate caller's list
+
+            if self.enable_search:
+                # Extract the last user message as a search query
+                last_user = None
+                for msg in reversed(messages):
+                    if msg["role"] == "user" and isinstance(msg["content"], str):
+                        last_user = msg["content"]
+                        break
+
+                if last_user:
+                    search_context = self._search_web(last_user)
+                    if search_context:
+                        # Inject search results as a system message before
+                        # the last user message so the model treats them as
+                        # grounding context
+                        insert_at = len(messages) - 1
+                        messages.insert(
+                            insert_at,
+                            {
+                                "role": "system",
+                                "content": (
+                                    f"Web search results for the user's query "
+                                    f"'{last_user[:200]}':\n\n{search_context}\n\n"
+                                    f"Use these results to inform your answer. "
+                                    f"Cite sources where relevant."
+                                ),
+                            },
+                        )
+
+            total_chars = sum(
+                len(msg.get("content", "") or "")
+                if isinstance(msg.get("content"), str)
+                else 0
+                for msg in messages
+            )
             logger.info(
-                f"DeepSeek API call: model={self.model_name}, messages={len(history)}, "
+                f"DeepSeek API call: model={self.model_name}, messages={len(messages)}, "
                 f"estimated_input_chars={total_chars}"
             )
 
             kwargs: dict = {
                 "model": self.model_name,
-                "messages": history,
+                "messages": messages,
             }
 
             response = self._deepseek.chat.completions.create(**kwargs)
