@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime, timezone
 from typing import BinaryIO, Dict, List
 
 import requests
@@ -114,23 +115,20 @@ class DeepSeekClient(ModelClient):
 
                 if last_user:
                     search_context = self._search_web(last_user)
+                    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                    context_parts = [f"Current time: {now}"]
                     if search_context:
-                        # Inject search results as a system message before
-                        # the last user message so the model treats them as
-                        # grounding context
-                        insert_at = len(messages) - 1
-                        messages.insert(
-                            insert_at,
-                            {
-                                "role": "system",
-                                "content": (
-                                    f"Web search results for the user's query "
-                                    f"'{last_user[:200]}':\n\n{search_context}\n\n"
-                                    f"Use these results to inform your answer. "
-                                    f"Cite sources where relevant."
-                                ),
-                            },
+                        context_parts.append(
+                            f"Web search results for '{last_user[:200]}':\n\n{search_context}\n\n"
+                            f"Use these results to inform your answer. Cite sources where relevant."
                         )
+                    messages.insert(
+                        len(messages) - 1,
+                        {
+                            "role": "system",
+                            "content": "\n\n".join(context_parts),
+                        },
+                    )
 
             total_chars = sum(
                 len(msg.get("content", "") or "")
