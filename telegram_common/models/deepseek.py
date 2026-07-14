@@ -3,7 +3,6 @@ import os
 from typing import BinaryIO, Dict, List
 
 import requests
-from duckduckgo_search import DDGS
 from openai import OpenAI
 
 from .base import ModelClient
@@ -62,6 +61,8 @@ class DeepSeekClient(ModelClient):
         Returns an empty string if search fails or returns nothing.
         """
         try:
+            from duckduckgo_search import DDGS  # lazy import
+
             logger.info(f"DDGS search: query='{query[:100]}'")
             results = list(DDGS().text(query, max_results=SEARCH_RESULT_LIMIT))
 
