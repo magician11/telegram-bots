@@ -63,8 +63,7 @@ class DeepSeekClient(ModelClient):
             )
             logger.info(
                 f"DeepSeek API call: model={self.model_name}, messages={len(history)}, "
-                f"estimated_input_chars={total_chars}, "
-                f"reasoning={self.reasoning_effort}, search={self.enable_search}"
+                f"estimated_input_chars={total_chars}"
             )
 
             kwargs: dict = {
@@ -72,32 +71,15 @@ class DeepSeekClient(ModelClient):
                 "messages": history,
             }
 
-            if self.enable_search:
-                kwargs["tools"] = [{"type": "web_search"}]
-                kwargs["tool_choice"] = "auto"
-
-            if self.reasoning_effort != "none":
-                kwargs["reasoning_effort"] = self.reasoning_effort
-
             response = self._deepseek.chat.completions.create(**kwargs)
 
             choice = response.choices[0]
             finish_reason = choice.finish_reason
             content = choice.message.content
 
-            # Extract metadata for logging
-            raw = response.model_dump() if hasattr(response, "model_dump") else {}
-            usage = raw.get("usage", {})
-            search_results = raw.get("search_results", [])
-            reasoning_tokens = usage.get("completion_tokens_details", {}).get(
-                "reasoning_tokens", 0
-            )
-
             logger.info(
                 f"DeepSeek response: finish_reason={finish_reason}, "
-                f"content_length={len(content) if content else 0} chars, "
-                f"search_results={len(search_results)}, "
-                f"reasoning_tokens={reasoning_tokens}"
+                f"content_length={len(content) if content else 0} chars"
             )
 
             if content is None:
