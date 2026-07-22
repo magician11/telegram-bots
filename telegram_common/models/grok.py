@@ -218,16 +218,15 @@ class GrokClient(ModelClient):
 
             response = self.client.responses.create(**kwargs)
 
-            # Extract text from Responses API output format
+            # Extract text from Responses API output format.
+            # When tools (web_search) are used, the output contains multiple
+            # message items — keep the LAST one, which is the final answer.
             text = ""
             for item in response.output:
                 if getattr(item, "type", None) == "message":
                     for block in getattr(item, "content", []):
                         if getattr(block, "type", None) == "output_text":
                             text = getattr(block, "text", "")
-                            break
-                    if text:
-                        break
 
             # Extract usage metrics from raw dict (SDK doesn't map xAI extras)
             raw = response.model_dump()
