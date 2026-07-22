@@ -52,7 +52,7 @@ class DeepSeekClient(ModelClient):
     # ── capabilities ──────────────────────────────────────────────────────
 
     def supports_vision(self) -> bool:
-        return True
+        return False
 
     # ── chat / reasoning / search ──────────────────────────────────────────
 
