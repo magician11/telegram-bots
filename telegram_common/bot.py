@@ -842,10 +842,10 @@ async def handle_text_to_speech(update: Update, context: ContextTypes.DEFAULT_TY
 
         logger.info(f"TTS request from {user_id}: {len(text)} characters")
 
-        # Validate text length (TTS services have limits)
-        if len(text) > 4000:
+        # Validate text length (Grok TTS limit: 15,000 characters)
+        if len(text) > 15000:
             await update.message.reply_text(
-                "Text too long for speech conversion. Please keep it under 4000 characters."
+                "Text too long for speech conversion. Please keep it under 15,000 characters."
             )
             return
 
