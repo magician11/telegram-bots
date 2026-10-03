@@ -20,8 +20,7 @@ class GrokClient(ModelClient):
     def __init__(
         self,
         api_key: str,
-        model_name: str = "grok-4.6",
-        reasoning_effort: str = "medium",
+        model_name: str = "grok-4.7",
         enable_speech: bool = False,
     ):
         self.api_key = api_key
@@ -30,7 +29,6 @@ class GrokClient(ModelClient):
             base_url="https://api.x.ai/v1",
         )
         self.model_name = model_name
-        self.reasoning_effort = reasoning_effort  # "none", "low", "medium", "high"
         self.enable_speech = enable_speech
         self.speech_format = "mp3"  # xAI TTS returns MP3
 
@@ -199,24 +197,18 @@ class GrokClient(ModelClient):
     async def generate_response(self, history: List[Dict]) -> str:
         try:
             logger.info(
-                f"Grok API call: model={self.model_name}, messages={len(history)}, "
-                f"reasoning={self.reasoning_effort}"
+                f"Grok API call: model={self.model_name}, messages={len(history)}"
             )
 
             # Convert Chat Completions format to Responses API format for multimodal content
             history = self._convert_to_responses_format(history)
 
-            kwargs: dict = {
-                "model": self.model_name,
-                "input": history,
-                "tools": [{"type": "web_search"}],
-                "tool_choice": "auto",
-            }
-
-            if self.reasoning_effort != "none":
-                kwargs["reasoning"] = {"effort": self.reasoning_effort}
-
-            response = self.client.responses.create(**kwargs)
+            response = self.client.responses.create(
+                model=self.model_name,
+                input=history,  # type: ignore[arg-type]  # dict-based history is valid at runtime
+                tools=[{"type": "web_search"}],
+                tool_choice="auto",
+            )
 
             # Extract text from Responses API output format.
             # When tools (web_search) are used, the output contains multiple
